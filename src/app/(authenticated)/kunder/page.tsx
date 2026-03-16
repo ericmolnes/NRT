@@ -52,7 +52,7 @@ export default async function KunderPage({ searchParams }: PageProps) {
             {customers.length} bedrifter registrert
           </p>
         </div>
-        <Button render={<Link href="/kunder?showForm=true" />}>
+        <Button render={<Link href="/kunder/ny" />}>
           <Plus className="mr-2 h-4 w-4" />
           Ny kunde
         </Button>
