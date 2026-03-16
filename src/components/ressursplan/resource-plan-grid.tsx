@@ -1,0 +1,409 @@
+"use client";
+
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { GridHeader } from "./grid-header";
+import { GridRow } from "./grid-row";
+import { GridToolbar } from "./grid-toolbar";
+import { GridSummary } from "./grid-summary";
+import { ContextMenu } from "./context-menu";
+import { LabelManager } from "./label-manager";
+import { EntryEditor } from "./entry-editor";
+import { useGridSelection } from "./use-grid-selection";
+import { buildColorMap, type LabelDef } from "./allocation-color-map";
+import { formatDate, getDateRange } from "@/lib/resource-plan-utils";
+import { bulkSetAllocations, clearAllocations } from "@/app/(authenticated)/ressursplan/actions";
+import { AddEntryModal } from "./add-entry-modal";
+
+interface Allocation {
+  id: string;
+  startDate: string | Date;
+  endDate: string | Date;
+  label: string;
+}
+
+interface Entry {
+  id: string;
+  displayName: string;
+  crew: string | null;
+  company: string | null;
+  location: string | null;
+  notes: string | null;
+  allocations: Allocation[];
+  personnel: { id: string; name: string; status: string } | null;
+}
+
+interface ResourcePlanGridProps {
+  planId: string;
+  initialEntries: Entry[];
+  initialLabels: LabelDef[];
+  year: number;
+  crews: string[];
+  companies: string[];
+  locations: string[];
+}
+
+const WEEKS_TO_SHOW = 8;
+const DAYS_TO_SHOW = WEEKS_TO_SHOW * 7;
+
+export function ResourcePlanGrid({
+  planId,
+  initialEntries,
+  initialLabels,
+  year,
+  crews,
+  companies,
+  locations,
+}: ResourcePlanGridProps) {
+  const [entries, setEntries] = useState(initialEntries);
+  const [labels, setLabels] = useState(initialLabels);
+  const [filters, setFilters] = useState<{
+    search?: string;
+    crew?: string;
+    company?: string;
+    location?: string;
+  }>({});
+
+  const [windowStart, setWindowStart] = useState(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diff);
+    return monday;
+  });
+
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showLabelManager, setShowLabelManager] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    entryId: string;
+    date: string;
+    currentLabel?: string;
+  } | null>(null);
+
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const {
+    selection,
+    isSelecting,
+    handleCellMouseDown,
+    handleCellMouseEnter,
+    handleMouseUp,
+    clearSelection,
+  } = useGridSelection();
+
+  const colorMap = useMemo(() => buildColorMap(labels), [labels]);
+
+  const dates = useMemo(() => {
+    const end = new Date(windowStart);
+    end.setDate(end.getDate() + DAYS_TO_SHOW - 1);
+    return getDateRange(windowStart, end).map((d) => formatDate(d));
+  }, [windowStart]);
+
+  const weekendSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const dateStr of dates) {
+      const d = new Date(dateStr + "T00:00:00");
+      const day = d.getDay();
+      if (day === 0 || day === 6) set.add(dateStr);
+    }
+    return set;
+  }, [dates]);
+
+  const todayStr = formatDate(new Date());
+
+  const fetchGridData = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const startDate = formatDate(windowStart);
+      const endD = new Date(windowStart);
+      endD.setDate(endD.getDate() + DAYS_TO_SHOW - 1);
+      const endDate = formatDate(endD);
+
+      const params = new URLSearchParams({
+        planId,
+        startDate,
+        endDate,
+        ...(filters.search && { search: filters.search }),
+        ...(filters.crew && { crew: filters.crew }),
+        ...(filters.company && { company: filters.company }),
+        ...(filters.location && { location: filters.location }),
+      });
+
+      const res = await fetch(`/api/resource-plan/grid?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setEntries(data.entries);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [planId, windowStart, filters]);
+
+  useEffect(() => {
+    fetchGridData();
+  }, [fetchGridData]);
+
+  const filteredEntries = useMemo(() => {
+    let result = entries;
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      result = result.filter((e) => e.displayName.toLowerCase().includes(q));
+    }
+    if (filters.crew) result = result.filter((e) => e.crew === filters.crew);
+    if (filters.company) result = result.filter((e) => e.company === filters.company);
+    if (filters.location) result = result.filter((e) => e.location === filters.location);
+    return result;
+  }, [entries, filters]);
+
+  const groupedEntries = useMemo(() => {
+    const groups = new Map<string, Entry[]>();
+    for (const entry of filteredEntries) {
+      const key = entry.crew ?? "Uspesifisert";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(entry);
+    }
+    return groups;
+  }, [filteredEntries]);
+
+  const handleNavigate = useCallback((direction: "prev" | "next" | "today") => {
+    setWindowStart((prev) => {
+      if (direction === "today") {
+        const today = new Date();
+        const day = today.getDay();
+        const diff = day === 0 ? -6 : 1 - day;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + diff);
+        return monday;
+      }
+      const d = new Date(prev);
+      d.setDate(d.getDate() + (direction === "next" ? 7 * 4 : -7 * 4));
+      return d;
+    });
+  }, []);
+
+  const currentPeriodLabel = useMemo(() => {
+    const endD = new Date(windowStart);
+    endD.setDate(endD.getDate() + DAYS_TO_SHOW - 1);
+    const startMonth = windowStart.toLocaleDateString("nb-NO", { month: "short", day: "numeric" });
+    const endMonth = endD.toLocaleDateString("nb-NO", { month: "short", day: "numeric", year: "numeric" });
+    return `${startMonth} - ${endMonth}`;
+  }, [windowStart]);
+
+  // Seleksjon -> tilordne
+  useEffect(() => {
+    if (isSelecting || !selection || !activeTool) return;
+    const apply = async () => {
+      if (activeTool === "__eraser__") {
+        await clearAllocations({
+          entryIds: selection.entryIds,
+          startDate: selection.startDate,
+          endDate: selection.endDate,
+        });
+      } else {
+        await bulkSetAllocations({
+          entryIds: selection.entryIds,
+          startDate: selection.startDate,
+          endDate: selection.endDate,
+          label: activeTool,
+        });
+      }
+      clearSelection();
+      fetchGridData();
+    };
+    apply();
+  }, [isSelecting, selection, activeTool, clearSelection, fetchGridData]);
+
+  const selectedDates = useMemo(() => {
+    if (!selection) return new Set<string>();
+    const set = new Set<string>();
+    const start = new Date(selection.startDate);
+    const end = new Date(selection.endDate);
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      set.add(formatDate(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return set;
+  }, [selection]);
+
+  const selectedEntryIds = useMemo(() => new Set(selection?.entryIds ?? []), [selection]);
+
+  // Høyreklikk
+  const handleCellContextMenu = useCallback(
+    (e: React.MouseEvent, entryId: string, date: string) => {
+      e.preventDefault();
+      const entry = entries.find((en) => en.id === entryId);
+      let currentLabel: string | undefined;
+      if (entry) {
+        for (const alloc of entry.allocations) {
+          const s = new Date(alloc.startDate);
+          const en = new Date(alloc.endDate);
+          const d = new Date(date);
+          if (d >= s && d <= en) { currentLabel = alloc.label; break; }
+        }
+      }
+      setContextMenu({ x: e.clientX, y: e.clientY, entryId, date, currentLabel });
+    },
+    [entries]
+  );
+
+  const handleContextAssign = useCallback(async (labelName: string) => {
+    if (!contextMenu) return;
+    await bulkSetAllocations({
+      entryIds: [contextMenu.entryId],
+      startDate: contextMenu.date,
+      endDate: contextMenu.date,
+      label: labelName,
+    });
+    setContextMenu(null);
+    fetchGridData();
+  }, [contextMenu, fetchGridData]);
+
+  const handleContextClear = useCallback(async () => {
+    if (!contextMenu) return;
+    await clearAllocations({
+      entryIds: [contextMenu.entryId],
+      startDate: contextMenu.date,
+      endDate: contextMenu.date,
+    });
+    setContextMenu(null);
+    fetchGridData();
+  }, [contextMenu, fetchGridData]);
+
+  const handleEntryClick = useCallback((entryId: string) => {
+    const entry = entries.find((e) => e.id === entryId);
+    if (entry) setEditingEntry(entry);
+  }, [entries]);
+
+  const handleFilterChange = useCallback(
+    (newFilters: { search?: string; crew?: string; company?: string; location?: string }) => {
+      setFilters((prev) => ({ ...prev, ...newFilters }));
+    },
+    []
+  );
+
+  const handleExport = useCallback(() => {
+    const params = new URLSearchParams({ planId, year: year.toString() });
+    window.open(`/api/resource-plan/export?${params}`, "_blank");
+  }, [planId, year]);
+
+  const handleAddEntry = useCallback(() => {
+    // Handled by AddEntryModal component
+    fetchGridData();
+  }, [fetchGridData]);
+
+  const handleRefreshLabels = useCallback(async () => {
+    const res = await fetch(`/api/resource-plan/labels?planId=${planId}`);
+    if (res.ok) {
+      const data = await res.json();
+      setLabels(data);
+    }
+  }, [planId]);
+
+  return (
+    <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm overflow-hidden">
+      <GridToolbar
+        crews={crews}
+        companies={companies}
+        locations={locations}
+        labels={labels}
+        activeTool={activeTool}
+        onToolChange={setActiveTool}
+        onFilterChange={handleFilterChange}
+        onNavigate={handleNavigate}
+        onExport={handleExport}
+        onManageLabels={() => setShowLabelManager(true)}
+        onAddEntry={handleAddEntry}
+        planId={planId}
+        currentPeriodLabel={currentPeriodLabel}
+      />
+
+      <div
+        ref={gridRef}
+        className="flex-1 overflow-auto relative"
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {isLoading && (
+          <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center">
+            <div className="text-sm text-muted-foreground">Laster...</div>
+          </div>
+        )}
+
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: `180px 80px 60px 90px repeat(${dates.length}, 28px)` }}
+        >
+          <GridHeader dates={dates} todayStr={todayStr} />
+
+          {Array.from(groupedEntries.entries()).map(([crew, crewEntries]) => (
+            <div key={crew} className="contents">
+              <div
+                className="h-6 bg-gray-600 text-white text-[11px] font-semibold flex items-center px-2"
+                style={{ gridColumn: "1 / -1" }}
+              >
+                {crew} ({crewEntries.length})
+              </div>
+              {crewEntries.map((entry) => (
+                <GridRow
+                  key={entry.id}
+                  entryId={entry.id}
+                  displayName={entry.displayName}
+                  crew={entry.crew}
+                  company={entry.company}
+                  location={entry.location}
+                  allocations={entry.allocations}
+                  dates={dates}
+                  weekendSet={weekendSet}
+                  todayStr={todayStr}
+                  selectedDates={selectedDates}
+                  isEntrySelected={selectedEntryIds.has(entry.id)}
+                  colorMap={colorMap}
+                  onCellMouseDown={handleCellMouseDown}
+                  onCellMouseEnter={handleCellMouseEnter}
+                  onCellContextMenu={handleCellContextMenu}
+                  onEntryClick={handleEntryClick}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <GridSummary entries={filteredEntries} dates={dates} colorMap={colorMap} />
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          labels={labels}
+          currentLabel={contextMenu.currentLabel}
+          onAssign={handleContextAssign}
+          onClear={handleContextClear}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {showLabelManager && (
+        <LabelManager
+          planId={planId}
+          labels={labels}
+          onClose={() => setShowLabelManager(false)}
+          onRefresh={handleRefreshLabels}
+        />
+      )}
+
+      {editingEntry && (
+        <EntryEditor
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onRefresh={() => { setEditingEntry(null); fetchGridData(); }}
+        />
+      )}
+    </div>
+  );
+}

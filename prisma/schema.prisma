@@ -1,0 +1,930 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Personnel {
+  id                  String              @id @default(cuid())
+  name                String
+  email               String?
+  phone               String?
+  role                String
+  department          String?
+  rig                 String?
+  entraId             String?             @unique
+  status              PersonnelStatus     @default(ACTIVE)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  evaluations         Evaluation[]
+  evaluationLinks     EvaluationLink[]
+  fieldValues         FieldValue[]
+  notes               Note[]
+  poEmployee          POEmployee?
+  recmanCandidate     RecmanCandidate?
+  resourcePlanEntries ResourcePlanEntry[]
+  jobAssignments      JobAssignment[]
+
+  @@index([name])
+  @@index([entraId])
+  @@index([status])
+}
+
+model Evaluation {
+  id            String    @id @default(cuid())
+  score         Int
+  hpiSafety     Int       @default(5)
+  competence    Int       @default(5)
+  collaboration Int       @default(5)
+  workEthic     Int       @default(5)
+  independence  Int       @default(5)
+  punctuality   Int       @default(5)
+  comment       String?
+  evaluatorId   String
+  evaluatorName String
+  personnelId   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  personnel     Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+
+  @@index([personnelId])
+  @@index([evaluatorId])
+  @@index([createdAt])
+}
+
+model EvaluationLink {
+  id          String         @id @default(cuid())
+  token       String         @unique @default(cuid())
+  title       String
+  formType    FormLinkType   @default(EVALUATION)
+  personnelId String?
+  categoryId  String?
+  createdById String
+  createdBy   String
+  expiresAt   DateTime?
+  active      Boolean        @default(true)
+  usageCount  Int            @default(0)
+  createdAt   DateTime       @default(now())
+  category    FieldCategory? @relation(fields: [categoryId], references: [id])
+  personnel   Personnel?     @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([personnelId])
+  @@index([categoryId])
+}
+
+model Note {
+  id          String    @id @default(cuid())
+  content     String
+  authorId    String
+  authorName  String
+  personnelId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+
+  @@index([personnelId])
+  @@index([createdAt])
+}
+
+model FieldCategory {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  order           Int               @default(0)
+  evaluationLinks EvaluationLink[]
+  fields          FieldDefinition[]
+
+  @@index([order])
+}
+
+model FieldDefinition {
+  id         String        @id @default(cuid())
+  name       String
+  type       FieldType     @default(TEXT)
+  options    String?
+  required   Boolean       @default(false)
+  order      Int           @default(0)
+  categoryId String
+  category   FieldCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  values     FieldValue[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+  @@index([order])
+}
+
+model FieldValue {
+  id          String          @id @default(cuid())
+  value       String
+  personnelId String
+  fieldId     String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  field       FieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  personnel   Personnel       @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+
+  @@unique([personnelId, fieldId])
+  @@index([personnelId])
+  @@index([fieldId])
+}
+
+model PriceList {
+  id           String    @id @default(cuid())
+  supplier     String
+  vatNumber    String?
+  currency     String    @default("NOK")
+  validFrom    DateTime
+  validTo      DateTime
+  importedAt   DateTime  @default(now())
+  importedBy   String
+  productCount Int       @default(0)
+  active       Boolean   @default(true)
+  products     Product[]
+
+  @@index([active])
+}
+
+model Product {
+  id                String             @id @default(cuid())
+  productId         String
+  categoryCode      String             @default("0")
+  name              String
+  description       String?
+  quantityPerUnit   Int                @default(1)
+  unitCode          String
+  unitName          String
+  priceOre          Int
+  validFrom         DateTime
+  discountGroup     String?
+  classification    String?
+  manufacturer      String?
+  supplierProductId String?
+  stocked           Boolean            @default(false)
+  imageUrl          String?
+  priceListId       String
+  estimateLineItems EstimateLineItem[]
+  priceList         PriceList          @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+
+  @@unique([priceListId, productId])
+  @@index([productId])
+  @@index([name])
+  @@index([classification])
+  @@index([priceListId])
+}
+
+model NormCategory {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  discipline  Discipline
+  order       Int        @default(0)
+  norms       WorkNorm[]
+
+  @@index([discipline])
+  @@index([order])
+}
+
+model WorkNorm {
+  id           String       @id @default(cuid())
+  name         String
+  description  String?
+  hoursPerUnit Float
+  unit         String
+  sizeRange    String?
+  categoryId   String
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  category     NormCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+}
+
+model RateProfile {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  active      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  estimates   Estimate[]
+  rates       Rate[]
+}
+
+model Rate {
+  id            String      @id @default(cuid())
+  roleCode      String
+  roleName      String
+  hourlyRateNOK Int
+  profileId     String
+  profile       RateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, roleCode])
+  @@index([profileId])
+}
+
+model Estimate {
+  id                 String                 @id @default(cuid())
+  name               String
+  projectNumber      String?
+  description        String?
+  status             EstimateStatus         @default(DRAFT)
+  sourceFileName     String?
+  sourceFileUrl      String?
+  sourceFileType     String?
+  aiParseStatus      AiParseStatus          @default(PENDING)
+  aiRawOutput        String?
+  aiConfidence       Float?
+  rateProfileId      String?
+  totalLaborHours    Float                  @default(0)
+  totalLaborCost     Float                  @default(0)
+  totalMaterialCost  Float                  @default(0)
+  totalCost          Float                  @default(0)
+  markupPercent        Float                  @default(10)
+  contingencyPercent   Float                  @default(0)   // Uforutsett/reserve %
+  fieldEngineerPercent Float                  @default(15)  // Feltingenior-andel av elektro-timer
+  mobDemobCost         Float                  @default(0)   // Mob/demob kostnad
+  equipmentRentalCost  Float                  @default(0)   // Utstyrsleie
+  actualLaborHours     Float?
+  actualMaterialCost   Float?
+  completedAt          DateTime?
+  createdById        String
+  createdByName      String
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  actualTimeEntries  ActualTimeEntry[]
+  rateProfile        RateProfile?           @relation(fields: [rateProfileId], references: [id])
+  assumptions        EstimateAssumption[]
+  cables             EstimateCable[]
+  equipment          EstimateEquipment[]
+  laborSummary       EstimateLaborSummary[]
+  lineItems          EstimateLineItem[]
+  scopeItems         EstimateScopeItem[]
+
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+}
+
+model EstimateCable {
+  id               String   @id @default(cuid())
+  tagNumber        String?
+  cableType        String
+  fromLocation     String?
+  toLocation       String?
+  lengthMeters     Float
+  sizeCategory     String?
+  aiConfidence     Float?
+  verified         Boolean  @default(false)
+  actualHours      Float?
+  adjustmentFactor Float?
+  adjustmentNote   String?
+  estimateId       String
+  estimate         Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model EstimateEquipment {
+  id               String   @id @default(cuid())
+  tagNumber        String?
+  name             String
+  type             String
+  action           String
+  quantity         Int      @default(1)
+  aiConfidence     Float?
+  verified         Boolean  @default(false)
+  actualHours      Float?
+  adjustmentFactor Float?
+  adjustmentNote   String?
+  estimateId       String
+  estimate         Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model EstimateScopeItem {
+  id               String     @id @default(cuid())
+  description      String
+  discipline       Discipline
+  normId           String?
+  quantity         Float      @default(1)
+  unit             String     @default("stk")
+  hoursPerUnit     Float?
+  totalHours       Float?
+  adjustmentFactor Float      @default(1.0)  // Tilkomstfaktor: 0.5-2.0
+  adjustmentNote   String?                   // Forklaring pa justering
+  aiConfidence     Float?
+  verified         Boolean    @default(false)
+  estimateId   String
+  estimate     Estimate   @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model EstimateLineItem {
+  id            String   @id @default(cuid())
+  description   String
+  productId     String?
+  quantity      Float
+  unit          String   @default("stk")
+  unitPriceNOK  Float?
+  totalPriceNOK Float?
+  aiConfidence  Float?
+  verified      Boolean  @default(false)
+  estimateId    String
+  estimate      Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  product       Product? @relation(fields: [productId], references: [id])
+
+  @@index([estimateId])
+  @@index([productId])
+}
+
+model EstimateAssumption {
+  id         String   @id @default(cuid())
+  key        String
+  value      String
+  estimateId String
+  estimate   Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model ActualTimeEntry {
+  id               String     @id @default(cuid())
+  estimateId       String
+  discipline       Discipline
+  category         String
+  description      String?
+  estimatedHours   Float
+  actualHours      Float
+  adjustmentFactor Float?
+  adjustmentNote   String?
+  normId           String?
+  registeredById   String
+  registeredByName String
+  createdAt        DateTime   @default(now())
+  estimate         Estimate   @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+  @@index([normId])
+  @@index([category])
+}
+
+model NormUpdateLog {
+  id            String   @id @default(cuid())
+  normId        String
+  previousValue Float
+  newValue      Float
+  dataPoints    Int
+  avgActual     Float
+  stdDeviation  Float?
+  updatedById   String
+  updatedByName String
+  autoUpdated   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([normId])
+  @@index([createdAt])
+}
+
+model EstimateLaborSummary {
+  id         String     @id @default(cuid())
+  discipline Discipline
+  roleCode   String
+  totalHours Float
+  hourlyRate Float
+  totalCost  Float
+  estimateId String
+  estimate   Estimate   @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@index([estimateId])
+}
+
+model ResourcePlan {
+  id          String              @id @default(cuid())
+  year        Int                 @unique
+  name        String
+  createdById String
+  createdBy   String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  entries     ResourcePlanEntry[]
+  labels      ResourcePlanLabel[]
+
+  @@index([year])
+}
+
+model ResourcePlanLabel {
+  id             String       @id @default(cuid())
+  resourcePlanId String
+  name           String
+  color          String
+  textColor      String       @default("#ffffff")
+  category       String       @default("client")
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  resourcePlan   ResourcePlan @relation(fields: [resourcePlanId], references: [id], onDelete: Cascade)
+
+  @@unique([resourcePlanId, name])
+  @@index([resourcePlanId])
+  @@index([sortOrder])
+}
+
+model ResourcePlanEntry {
+  id             String               @id @default(cuid())
+  resourcePlanId String
+  personnelId    String?
+  displayName    String
+  crew           String?
+  location       String?
+  company        String?
+  notes          String?
+  sortOrder      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  allocations    ResourceAllocation[]
+  personnel      Personnel?           @relation(fields: [personnelId], references: [id])
+  resourcePlan   ResourcePlan         @relation(fields: [resourcePlanId], references: [id], onDelete: Cascade)
+
+  @@index([resourcePlanId])
+  @@index([personnelId])
+  @@index([crew])
+  @@index([sortOrder])
+}
+
+model ResourceAllocation {
+  id              String            @id @default(cuid())
+  entryId         String
+  startDate       DateTime          @db.Date
+  endDate         DateTime          @db.Date
+  label           String            @default("")
+  source          AllocationSource  @default(MANUAL)
+  jobAssignmentId String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  entry           ResourcePlanEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  jobAssignment   JobAssignment?    @relation(fields: [jobAssignmentId], references: [id], onDelete: SetNull)
+
+  @@index([entryId])
+  @@index([startDate, endDate])
+  @@index([entryId, startDate])
+  @@index([label])
+  @@index([jobAssignmentId])
+}
+
+model POSyncLog {
+  id            String    @id @default(cuid())
+  resourceType  String
+  direction     String
+  status        String
+  recordsTotal  Int       @default(0)
+  recordsSynced Int       @default(0)
+  recordsFailed Int       @default(0)
+  errorMessage  String?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  triggeredBy   String
+
+  @@index([resourceType])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model POCustomer {
+  id                 String      @id @default(cuid())
+  poId               BigInt      @unique
+  code               Int?
+  name               String
+  organizationNumber String?
+  emailAddress       String?
+  phoneNumber        String?
+  contactPersonName  String?
+  isActive           Boolean     @default(true)
+  rawJson            String?
+  lastSyncedAt       DateTime    @default(now())
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  invoices           POInvoice[]
+  projects           POProject[]
+  customer           Customer?
+
+  @@index([name])
+  @@index([code])
+  @@index([lastSyncedAt])
+}
+
+model POProject {
+  id           String      @id @default(cuid())
+  poId         BigInt      @unique
+  code         String?
+  name         String
+  description  String?
+  isCompleted  Boolean     @default(false)
+  customerId   String?
+  rawJson      String?
+  lastSyncedAt DateTime    @default(now())
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  invoices     POInvoice[]
+  customer     POCustomer? @relation(fields: [customerId], references: [id])
+  project      Project?
+
+  @@index([name])
+  @@index([code])
+  @@index([customerId])
+  @@index([lastSyncedAt])
+}
+
+model POEmployee {
+  id           String     @id @default(cuid())
+  poId         BigInt     @unique
+  code         String?
+  firstName    String
+  lastName     String
+  email        String?
+  phone        String?
+  department   String?
+  jobTitle     String?
+  isActive     Boolean    @default(true)
+  rawJson      String?
+  lastSyncedAt DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  personnelId  String?    @unique
+  personnel    Personnel? @relation(fields: [personnelId], references: [id])
+
+  @@index([lastName])
+  @@index([email])
+  @@index([lastSyncedAt])
+}
+
+model POInvoice {
+  id            String      @id @default(cuid())
+  poId          BigInt      @unique
+  invoiceNumber String?
+  status        String?
+  customerId    String?
+  projectId     String?
+  netAmount     Float?
+  totalAmount   Float?
+  currencyCode  String?     @default("NOK")
+  invoiceDate   DateTime?
+  dueDate       DateTime?
+  rawJson       String?
+  lastSyncedAt  DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  customer      POCustomer? @relation(fields: [customerId], references: [id])
+  project       POProject?  @relation(fields: [projectId], references: [id])
+
+  @@index([invoiceNumber])
+  @@index([customerId])
+  @@index([projectId])
+  @@index([status])
+  @@index([lastSyncedAt])
+}
+
+enum PersonnelStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum FormLinkType {
+  EVALUATION
+  CUSTOM_FIELDS
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  BOOLEAN
+  TEXTAREA
+}
+
+enum Discipline {
+  ELECTRICAL
+  INSTRUMENT
+  ENGINEERING
+}
+
+enum EstimateStatus {
+  DRAFT
+  AI_PARSING
+  REVIEW
+  APPROVED
+  COMPLETED
+  ARCHIVED
+}
+
+enum AiParseStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AllocationSource {
+  MANUAL
+  JOB_GENERATED
+  JOB_OVERRIDDEN
+}
+
+// ─── Kunde → Prosjekt → Jobb ───────────────────────────────────
+
+model Customer {
+  id                 String       @id @default(cuid())
+  name               String
+  organizationNumber String?
+  emailAddress       String?
+  phoneNumber        String?
+  address            String?
+  city               String?
+  postalCode         String?
+  country            String?      @default("Norge")
+  industry           String?
+  notes              String?
+  isActive           Boolean      @default(true)
+
+  poCustomerId       String?      @unique
+  poCustomer         POCustomer?  @relation(fields: [poCustomerId], references: [id])
+  poSyncStatus       SyncStatus   @default(NOT_SYNCED)
+
+  recmanCompanyId    String?      @unique    // Recman company ID
+  recmanCompanyType  String?                 // ownCompany, customer, prospect, collaborator
+
+  createdById        String
+  createdByName      String
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  contacts           CustomerContact[]
+  projects           Project[]
+
+  @@index([name])
+  @@index([poCustomerId])
+  @@index([recmanCompanyId])
+  @@index([isActive])
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String
+  name       String
+  title      String?
+  email      String?
+  phone      String?
+  isPrimary  Boolean  @default(false)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+model Project {
+  id             String        @id @default(cuid())
+  name           String
+  code           String?
+  description    String?
+  status         ProjectStatus @default(ACTIVE)
+  location       String?
+
+  customerId     String
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  poProjectId    String?       @unique
+  poProject      POProject?    @relation(fields: [poProjectId], references: [id])
+  poSyncStatus   SyncStatus    @default(NOT_SYNCED)
+
+  recmanProjectId String?      @unique    // Recman project ID
+
+  createdById    String
+  createdByName  String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  jobs           Job[]
+
+  @@index([customerId])
+  @@index([poProjectId])
+  @@index([recmanProjectId])
+  @@index([status])
+  @@index([name])
+}
+
+model Job {
+  id                    String           @id @default(cuid())
+  name                  String
+  description           String?
+  type                  JobType
+  status                JobStatus        @default(ACTIVE)
+  location              String
+
+  startDate             DateTime         @db.Date
+  endDate               DateTime?        @db.Date
+
+  projectId             String
+  project               Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  rotationPatternId     String?
+  rotationPattern       RotationPattern? @relation(fields: [rotationPatternId], references: [id])
+
+  resourcePlanLabelName String?
+
+  createdById           String
+  createdByName         String
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  assignments           JobAssignment[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([resourcePlanLabelName])
+}
+
+model JobAssignment {
+  id                String           @id @default(cuid())
+  jobId             String
+  personnelId       String
+
+  rotationPatternId String?
+  rotationPattern   RotationPattern? @relation(fields: [rotationPatternId], references: [id])
+
+  startDate         DateTime         @db.Date
+  endDate           DateTime?        @db.Date
+  notes             String?
+  isActive          Boolean          @default(true)
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  job               Job              @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  personnel         Personnel        @relation(fields: [personnelId], references: [id])
+  allocations       ResourceAllocation[]
+
+  @@unique([jobId, personnelId])
+  @@index([jobId])
+  @@index([personnelId])
+  @@index([isActive])
+}
+
+// ─── Rotasjonsmønstre ───────────────────────────────────────────
+
+model RotationPattern {
+  id             String            @id @default(cuid())
+  name           String            @unique
+  description    String?
+  totalCycleDays Int
+  isActive       Boolean           @default(true)
+
+  createdById    String
+  createdByName  String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  segments       RotationSegment[]
+  jobs           Job[]
+  assignments    JobAssignment[]
+
+  @@index([isActive])
+}
+
+model RotationSegment {
+  id                String          @id @default(cuid())
+  rotationPatternId String
+  type              SegmentType
+  days              Int
+  sortOrder         Int             @default(0)
+  label             String?
+
+  rotationPattern   RotationPattern @relation(fields: [rotationPatternId], references: [id], onDelete: Cascade)
+
+  @@index([rotationPatternId])
+  @@index([sortOrder])
+}
+
+enum SyncStatus {
+  NOT_SYNCED
+  SYNCED
+  PENDING_PUSH
+  PUSH_FAILED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum JobType {
+  TIME_LIMITED
+  ONGOING
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum SegmentType {
+  WORK
+  OFF
+  VACATION
+  AVSPASERING
+  COURSE
+}
+
+// ─── Recman: Kandidater og ansatte ──────────────────────────────────
+
+model RecmanCandidate {
+  id              String    @id @default(cuid())
+  recmanId        String    @unique              // candidateId fra Recman
+  corporationId   String?
+  firstName       String
+  lastName        String
+  email           String?
+  phone           String?                        // Telefonnummer
+  mobilePhone     String?                        // Mobiltelefon
+  address         String?                        // Gateadresse
+  postalCode      String?                        // Postnummer
+  postalPlace     String?                        // Poststed
+  city            String?
+  country         String?
+  nationality     String?
+  gender          String?
+  dob             DateTime?
+  title           String?                        // Stillingstittel
+  description     String?
+  rating          Int       @default(0)          // Stjernerating 0-5
+  imageUrl        String?                        // Profilbilde-URL
+  linkedIn        String?                        // LinkedIn-profil
+
+  // Ansattinfo (fra employee-feltet)
+  isEmployee      Boolean   @default(false)
+  employeeNumber  Int?
+  employeeStart   DateTime?
+  employeeEnd     DateTime?                      // null = aktiv
+
+  // Kompetanse (lagret som JSON for fleksibilitet)
+  skills            Json?                        // RecmanSkill[]
+  education         Json?                        // RecmanEducation[]
+  experience        Json?                        // RecmanExperience[]
+  projectExperience Json?                        // RecmanProjectExperience[]
+  courses           Json?                        // RecmanCourse[] — kurs, sert., fagbrev
+  relatives         Json?                        // RecmanRelative[] — pårørende
+  attributes        Json?                        // RecmanAttribute[]
+  languages         Json?                        // RecmanLanguage[]
+  driversLicense    Json?                        // string[]
+  references        Json?                        // RecmanReference[]
+  files             Json?                        // RecmanFile[] — dokumenter, kontrakter
+
+  // Synkronisering
+  recmanCreated   DateTime?
+  recmanUpdated   DateTime?
+  lastSyncedAt    DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Kobling til Personnel
+  personnelId     String?   @unique
+  personnel       Personnel? @relation(fields: [personnelId], references: [id])
+
+  @@index([email])
+  @@index([lastName])
+  @@index([isEmployee])
+  @@index([title])
+  @@index([lastSyncedAt])
+}
+
+// Synkroniseringslogg for Recman
+model RecmanSyncLog {
+  id            String    @id @default(cuid())
+  direction     String                           // "pull" eller "push"
+  status        String                           // "running", "completed", "failed"
+  recordsTotal  Int       @default(0)
+  recordsSynced Int       @default(0)
+  recordsFailed Int       @default(0)
+  errorMessage  String?
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  triggeredBy   String
+
+  @@index([status])
+  @@index([startedAt])
+}
