@@ -15,9 +15,5 @@ export default async function ProjectDetailPage({
   const project = await getProjectById(id);
   if (!project) notFound();
 
-  return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <ProjectDetail project={project} />
-    </div>
-  );
+  return <ProjectDetail project={project} />;
 }
