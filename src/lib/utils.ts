@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function getInitials(name: string, maxChars = 2): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, maxChars);
+}
+
 /**
  * Safely extract a string value from FormData.
  * Returns empty string if the key is missing or the value is not a string.

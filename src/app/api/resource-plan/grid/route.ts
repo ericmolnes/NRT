@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth";
-import { getResourcePlanGrid, getResourcePlanStats } from "@/lib/queries/resource-plan";
+import { getStaffingPlan } from "@/lib/queries/resource-plan";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
@@ -9,33 +9,21 @@ export async function GET(request: NextRequest) {
   }
 
   const params = request.nextUrl.searchParams;
-  const planId = params.get("planId");
-  const startDate = params.get("startDate");
-  const endDate = params.get("endDate");
+  const startDateStr = params.get("startDate");
+  const endDateStr = params.get("endDate");
 
-  if (!planId || !startDate || !endDate) {
+  if (!startDateStr || !endDateStr) {
     return NextResponse.json(
-      { error: "planId, startDate og endDate er påkrevd" },
+      { error: "startDate og endDate er p\u00e5krevd" },
       { status: 400 }
     );
   }
 
-  const filters = {
-    search: params.get("search") ?? undefined,
-    crew: params.get("crew") ?? undefined,
-    company: params.get("company") ?? undefined,
-    location: params.get("location") ?? undefined,
-  };
+  const search = params.get("search") ?? undefined;
+  const startDate = new Date(startDateStr);
+  const endDate = new Date(endDateStr);
 
-  const [entries, stats] = await Promise.all([
-    getResourcePlanGrid(
-      planId,
-      new Date(startDate),
-      new Date(endDate),
-      filters
-    ),
-    getResourcePlanStats(planId),
-  ]);
+  const data = await getStaffingPlan(startDate, endDate, search);
 
-  return NextResponse.json({ entries, stats });
+  return NextResponse.json(data);
 }

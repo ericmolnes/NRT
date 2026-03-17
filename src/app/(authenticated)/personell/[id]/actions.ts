@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isAdmin } from "@/lib/rbac";
+import { isAdmin, assertAdmin } from "@/lib/rbac";
 import { updatePersonnelSchema } from "@/lib/validations/personnel";
 import { getFormString, getFormStringOptional } from "@/lib/utils";
 import { createNoteSchema } from "@/lib/validations/notes";
@@ -211,6 +211,7 @@ export async function createFieldCategory(
 ): Promise<ActionState> {
   const session = await auth();
   if (!session?.user) return { message: "Ikke autentisert" };
+  await assertAdmin();
 
   const raw = {
     name: formData.get("name") as string,
@@ -235,6 +236,7 @@ export async function deleteFieldCategory(
 ): Promise<ActionState> {
   const session = await auth();
   if (!session?.user) return { message: "Ikke autentisert" };
+  await assertAdmin();
 
   const id = formData.get("id") as string;
   await db.fieldCategory.delete({ where: { id } });
@@ -250,6 +252,7 @@ export async function createFieldDefinition(
 ): Promise<ActionState> {
   const session = await auth();
   if (!session?.user) return { message: "Ikke autentisert" };
+  await assertAdmin();
 
   const raw = {
     name: formData.get("name") as string,
@@ -278,6 +281,7 @@ export async function updateFieldDefinition(
 ): Promise<ActionState> {
   const session = await auth();
   if (!session?.user) return { message: "Ikke autentisert" };
+  await assertAdmin();
 
   const raw = {
     id: formData.get("id") as string,
@@ -307,6 +311,7 @@ export async function deleteFieldDefinition(
 ): Promise<ActionState> {
   const session = await auth();
   if (!session?.user) return { message: "Ikke autentisert" };
+  await assertAdmin();
 
   const id = formData.get("id") as string;
   await db.fieldDefinition.delete({ where: { id } });

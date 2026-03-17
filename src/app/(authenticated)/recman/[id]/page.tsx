@@ -17,5 +17,5 @@ export default async function CandidateDetailPage({
     redirect(`/personell/${candidate.personnelId}?tab=kompetanse`);
   }
 
-  redirect("/personell?sync=recman");
+  redirect("/personell/kandidater");
 }

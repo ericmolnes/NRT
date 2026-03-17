@@ -59,6 +59,15 @@ export async function getAllPersonnel() {
   });
 }
 
+/** Minimal personnel data for unauthenticated public forms (evaluation links). */
+export async function getPersonnelForPublicForm() {
+  return db.personnel.findMany({
+    select: { id: true, name: true, role: true },
+    where: { status: "ACTIVE" },
+    orderBy: { name: "asc" },
+  });
+}
+
 export async function getDistinctRigs() {
   const results = await db.personnel.findMany({
     where: { rig: { not: null } },

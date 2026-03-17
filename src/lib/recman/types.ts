@@ -249,3 +249,8 @@ export const SKILL_CATEGORIES = {
 } as const;
 
 export type SkillCategoryKey = keyof typeof SKILL_CATEGORIES;
+
+// Skill keywords used to highlight important certifications in table views
+export const EX_SKILL_KEYWORDS = ["ex ", "ex-", "atex", "iecex"] as const;
+export const SAFETY_SKILL_KEYWORDS = ["fallsikring", "gsk", "bosiet"] as const;
+export const HIGHLIGHT_SKILL_KEYWORDS = [...EX_SKILL_KEYWORDS, ...SAFETY_SKILL_KEYWORDS] as const;

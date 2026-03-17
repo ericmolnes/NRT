@@ -25,6 +25,9 @@ export const authConfig = {
         token.id = profile.sub;
         token.groups =
           (profile as Record<string, unknown>).groups as string[] ?? [];
+        token.accessToken = account.access_token;
+        token.refreshToken = account.refresh_token;
+        token.expiresAt = account.expires_at;
       }
       return token;
     },
@@ -33,6 +36,8 @@ export const authConfig = {
         session.user.id = token.id as string;
         session.user.groups = (token.groups as string[]) ?? [];
       }
+      // Expose access token for Graph API
+      (session as unknown as Record<string, unknown>).accessToken = token.accessToken;
       return session;
     },
   },

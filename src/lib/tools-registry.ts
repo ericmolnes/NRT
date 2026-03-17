@@ -1,4 +1,4 @@
-import { ClipboardCheck, Users, FileText, Calculator, Link2, Building, FolderKanban, Receipt, CalendarRange, Briefcase, RefreshCw, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, Users, UserSearch, FileText, Calculator, Link2, Building, FolderKanban, Receipt, CalendarRange, Briefcase, RefreshCw, ShieldCheck, Truck, FileCheck, type LucideIcon } from "lucide-react";
 
 export interface ToolDefinition {
   id: string;
@@ -20,6 +20,7 @@ export const categories: CategoryDefinition[] = [
   { id: "personell", label: "Personell", icon: Users },
   { id: "evaluering", label: "Evaluering", icon: ClipboardCheck },
   { id: "estimering", label: "Estimering", icon: Calculator },
+  { id: "kvalitet", label: "Kvalitet", icon: ShieldCheck },
   { id: "drift", label: "Drift", icon: Briefcase },
   { id: "planlegging", label: "Planlegging", icon: CalendarRange },
   { id: "integrasjoner", label: "Integrasjoner", icon: Link2 },
@@ -32,6 +33,14 @@ export const tools: ToolDefinition[] = [
     description: "Samlet ansattportal med synk-status, kompetanse og HR-data",
     url: "/personell",
     icon: Users,
+    category: "personell",
+  },
+  {
+    id: "candidates",
+    name: "Kandidater",
+    description: "Kandidatoversikt fra RecMan — ikke-ansatte i kandidatpool",
+    url: "/personell/kandidater",
+    icon: UserSearch,
     category: "personell",
   },
   {
@@ -65,6 +74,22 @@ export const tools: ToolDefinition[] = [
     url: "/estimering/katalog",
     icon: Receipt,
     category: "estimering",
+  },
+  {
+    id: "suppliers",
+    name: "Leverandører",
+    description: "Leverandørregister med godkjenning og evaluering (ISO 9001)",
+    url: "/leverandorer",
+    icon: Truck,
+    category: "kvalitet",
+  },
+  {
+    id: "documents",
+    name: "Dokumentkontroll",
+    description: "Dokumentregister med versjonskontroll og godkjenning",
+    url: "/dokumenter",
+    icon: FileCheck,
+    category: "kvalitet",
   },
   {
     id: "customers",

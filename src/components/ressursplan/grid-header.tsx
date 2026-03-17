@@ -9,7 +9,7 @@ const MONTH_NAMES = [
   "Juli", "August", "September", "Oktober", "November", "Desember",
 ];
 
-const DAY_NAMES = ["søn", "man", "tir", "ons", "tor", "fre", "lør"];
+const DAY_NAMES = ["s\u00f8n", "man", "tir", "ons", "tor", "fre", "l\u00f8r"];
 
 interface GridHeaderProps {
   dates: string[];
@@ -54,19 +54,22 @@ export function GridHeader({ dates, todayStr }: GridHeaderProps) {
 
   return (
     <>
-      {/* Månedsrad */}
+      {/* M\u00e5nedsrad */}
       <div
         className="sticky top-0 z-30 flex"
         style={{ gridColumn: `1 / -1` }}
       >
-        <div className="sticky left-0 z-30 h-6 bg-gray-800 text-white text-xs font-semibold flex items-center px-2 border-b border-gray-700 shrink-0" style={{ width: 410 }}>
+        <div
+          className="sticky left-0 z-30 h-7 bg-[oklch(0.16_0.035_250)] text-white text-xs font-semibold flex items-center px-3 border-b border-[oklch(0.22_0.03_250)] shrink-0"
+          style={{ width: 450, fontFamily: "var(--font-display)" }}
+        >
           Ressursplan
         </div>
         {months.map((m, i) => (
           <div
             key={`month-${i}`}
-            className="h-6 bg-gray-800 text-white text-[10px] font-semibold flex items-center justify-center border-b border-r border-gray-700 shrink-0"
-            style={{ width: m.span * 28 }}
+            className="h-7 bg-[oklch(0.16_0.035_250)] text-white text-[11px] font-semibold flex items-center justify-center border-b border-r border-[oklch(0.22_0.03_250)] shrink-0"
+            style={{ width: m.span * 32, fontFamily: "var(--font-display)" }}
           >
             {m.label}
           </div>
@@ -75,15 +78,15 @@ export function GridHeader({ dates, todayStr }: GridHeaderProps) {
 
       {/* Ukenummerrad */}
       <div
-        className="sticky top-6 z-30 flex"
+        className="sticky top-7 z-30 flex"
         style={{ gridColumn: `1 / -1` }}
       >
-        <div className="sticky left-0 z-30 h-5 bg-gray-700 border-b border-gray-600 shrink-0" style={{ width: 410 }} />
+        <div className="sticky left-0 z-30 h-5 bg-[oklch(0.20_0.03_250)] border-b border-[oklch(0.25_0.025_250)] shrink-0" style={{ width: 450 }} />
         {weeks.map((w, i) => (
           <div
             key={`week-${i}`}
-            className="h-5 bg-gray-700 text-gray-300 text-[10px] flex items-center justify-center border-b border-r border-gray-600 shrink-0"
-            style={{ width: w.span * 28 }}
+            className="h-5 bg-[oklch(0.20_0.03_250)] text-[oklch(0.65_0.04_250)] text-[10px] flex items-center justify-center border-b border-r border-[oklch(0.25_0.025_250)] shrink-0"
+            style={{ width: w.span * 32 }}
           >
             {w.label}
           </div>
@@ -91,16 +94,16 @@ export function GridHeader({ dates, todayStr }: GridHeaderProps) {
       </div>
 
       {/* Dagnavnrad */}
-      <div className="sticky left-0 top-11 z-30 h-6 bg-gray-100 text-xs font-medium flex items-center px-2 border-b border-gray-300 min-w-[180px]">
+      <div className="sticky left-0 top-12 z-30 h-6 bg-[oklch(0.96_0.005_250)] text-xs font-medium flex items-center px-2.5 border-b border-gray-200 min-w-[200px]" style={{ fontFamily: "var(--font-display)" }}>
         Navn
       </div>
-      <div className="sticky left-[180px] top-11 z-30 h-6 bg-gray-100 text-[10px] font-medium flex items-center px-1 border-b border-r border-gray-300 min-w-[80px]">
+      <div className="sticky left-[200px] top-12 z-30 h-6 bg-[oklch(0.96_0.005_250)] text-[10px] font-medium flex items-center px-1.5 border-b border-r border-gray-200 min-w-[80px]">
         Crew
       </div>
-      <div className="sticky left-[260px] top-11 z-30 h-6 bg-gray-100 text-[10px] font-medium flex items-center px-1 border-b border-r border-gray-300 min-w-[60px]">
+      <div className="sticky left-[280px] top-12 z-30 h-6 bg-[oklch(0.96_0.005_250)] text-[10px] font-medium flex items-center px-1.5 border-b border-r border-gray-200 min-w-[70px]">
         Selskap
       </div>
-      <div className="sticky left-[320px] top-11 z-30 h-6 bg-gray-100 text-[10px] font-medium flex items-center px-1 border-b border-r border-gray-300 min-w-[90px]">
+      <div className="sticky left-[350px] top-12 z-30 h-6 bg-[oklch(0.96_0.005_250)] text-[10px] font-medium flex items-center px-1.5 border-b border-r border-gray-200 min-w-[100px]">
         Lokasjon
       </div>
       {dates.map((dateStr) => {
@@ -111,9 +114,9 @@ export function GridHeader({ dates, todayStr }: GridHeaderProps) {
           <div
             key={`day-${dateStr}`}
             className={cn(
-              "sticky top-11 z-20 h-6 min-w-[28px] text-[8px] flex flex-col items-center justify-center border-b border-r border-gray-300 leading-none",
-              isWeekend ? "bg-gray-200 text-gray-500" : "bg-gray-100 text-gray-700",
-              dateStr === todayStr && "bg-blue-100 font-bold text-blue-700"
+              "sticky top-12 z-20 h-6 min-w-[32px] text-[8px] flex flex-col items-center justify-center border-b border-r border-gray-200 leading-none",
+              isWeekend ? "bg-gray-100 text-gray-400" : "bg-[oklch(0.96_0.005_250)] text-gray-600",
+              dateStr === todayStr && "bg-[oklch(0.92_0.03_220)] font-bold text-[oklch(0.35_0.1_220)]"
             )}
             title={dateStr}
           >

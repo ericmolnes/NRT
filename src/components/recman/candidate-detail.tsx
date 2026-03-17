@@ -1,14 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   Briefcase,
@@ -21,8 +31,16 @@ import {
   MessageSquare,
   Wrench,
   Languages,
+  Pencil,
+  Lock,
+  Loader2,
+  Check,
+  HardHat,
+  Phone,
 } from "lucide-react";
 import Link from "next/link";
+import { updateCandidate } from "@/app/(authenticated)/personell/kandidater/actions";
+import { EX_SKILL_KEYWORDS, SAFETY_SKILL_KEYWORDS } from "@/lib/recman/types";
 
 type Skill = { skillId: string; name: string };
 type Education = { educationId: string; schoolName: string; type: string; degree: string; location: string; startDate: string; endDate: string };
@@ -37,6 +55,7 @@ type Candidate = {
   firstName: string;
   lastName: string;
   email: string | null;
+  phone: string | null;
   city: string | null;
   country: string | null;
   nationality: string | null;
@@ -46,6 +65,7 @@ type Candidate = {
   description: string | null;
   rating: number;
   isEmployee: boolean;
+  isContractor: boolean;
   employeeNumber: number | null;
   employeeStart: Date | null;
   employeeEnd: Date | null;
@@ -62,14 +82,6 @@ type Candidate = {
   personnel: { id: string; name: string } | null;
 };
 
-const tabs = [
-  { id: "oversikt", label: "Oversikt" },
-  { id: "kompetanse", label: "Kompetanse" },
-  { id: "utdanning", label: "Utdanning" },
-  { id: "erfaring", label: "Erfaring" },
-  { id: "referanser", label: "Referanser" },
-];
-
 const levelLabels: Record<string, string> = {
   nativeOrBilingual: "Morsmål",
   professionalWorking: "Profesjonell",
@@ -78,7 +90,32 @@ const levelLabels: Record<string, string> = {
   elementary: "Elementær",
 };
 
-export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
+function RecManReadOnlyNotice({ field }: { field: string }) {
+  return (
+    <p className="text-xs text-muted-foreground mt-4 flex items-center gap-1">
+      <Lock className="h-3 w-3" /> {field} kan kun endres direkte i RecMan
+    </p>
+  );
+}
+
+interface CandidateDetailProps {
+  candidate: Candidate;
+  embedded?: boolean;
+  onUpdated?: () => void;
+}
+
+export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: CandidateDetailProps) {
+  const baseTabs = [
+    { id: "oversikt", label: "Oversikt" },
+    { id: "kompetanse", label: "Kompetanse" },
+    { id: "utdanning", label: "Utdanning" },
+    { id: "erfaring", label: "Erfaring" },
+    { id: "referanser", label: "Referanser" },
+  ];
+  const tabs = embedded
+    ? [...baseTabs, { id: "rediger", label: "Rediger" }]
+    : baseTabs;
+
   const [tab, setTab] = useState("oversikt");
 
   const skills = (c.skills as Skill[]) || [];
@@ -94,21 +131,33 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/recman" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mb-2">
-            <ArrowLeft className="h-3 w-3" /> Tilbake til kandidater
-          </Link>
-          <h1 className="text-3xl font-bold tracking-tight">{c.firstName} {c.lastName}</h1>
+          {!embedded && (
+            <Link href="/personell/kandidater" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mb-2">
+              <ArrowLeft className="h-3 w-3" /> Tilbake til kandidater
+            </Link>
+          )}
+          {embedded ? (
+            <h2 className="text-2xl font-bold tracking-tight">{c.firstName} {c.lastName}</h2>
+          ) : (
+            <h1 className="text-3xl font-bold tracking-tight">{c.firstName} {c.lastName}</h1>
+          )}
           <p className="text-muted-foreground">{c.title || "Ingen tittel"}</p>
           <div className="flex items-center gap-3 mt-2">
-            {c.isEmployee ? (
+            {c.isEmployee && !c.employeeEnd ? (
               <Badge className="bg-green-600">
                 <Briefcase className="h-3 w-3 mr-1" />
-                Ansatt #{c.employeeNumber}
+                Ansatt{c.employeeNumber ? ` #${c.employeeNumber}` : ""}
+              </Badge>
+            ) : c.isEmployee && c.employeeEnd ? (
+              <Badge variant="destructive">Sluttet</Badge>
+            ) : c.isContractor ? (
+              <Badge className="bg-blue-600">
+                <HardHat className="h-3 w-3 mr-1" />
+                Innleid
               </Badge>
             ) : (
               <Badge variant="outline">Kandidat</Badge>
             )}
-            {c.employeeEnd && <Badge variant="destructive">Sluttet</Badge>}
             {c.rating > 0 && (
               <div className="flex items-center gap-0.5">
                 {Array.from({ length: c.rating }).map((_, i) => (
@@ -121,15 +170,16 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b">
+      <div className="flex gap-1 border-b overflow-x-auto">
         {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
+            {t.id === "rediger" && <Pencil className="inline h-3 w-3 mr-1" />}
             {t.label}
           </button>
         ))}
@@ -137,11 +187,12 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
 
       {/* Tab content */}
       {tab === "oversikt" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className={`grid grid-cols-1 ${embedded ? "" : "md:grid-cols-2"} gap-6`}>
           <Card>
             <CardHeader><CardTitle className="text-sm">Kontaktinfo</CardTitle></CardHeader>
             <CardContent className="space-y-3 text-sm">
               {c.email && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground" /> {c.email}</div>}
+              {c.phone && <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /> {c.phone}</div>}
               {c.city && <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /> {c.city}{c.country ? `, ${c.country}` : ""}</div>}
               {c.nationality && <div className="flex items-center gap-2"><Globe className="h-4 w-4 text-muted-foreground" /> {c.nationality}</div>}
               {c.dob && <div>Fodt: {new Date(c.dob).toLocaleDateString("nb-NO")}</div>}
@@ -165,7 +216,7 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
           )}
 
           {c.description && (
-            <Card className="md:col-span-2">
+            <Card className={embedded ? "" : "md:col-span-2"}>
               <CardHeader><CardTitle className="text-sm">Beskrivelse</CardTitle></CardHeader>
               <CardContent><p className="text-sm whitespace-pre-wrap">{c.description}</p></CardContent>
             </Card>
@@ -213,7 +264,7 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
             </Card>
           )}
 
-          <Card className="md:col-span-2">
+          <Card className={embedded ? "" : "md:col-span-2"}>
             <CardContent className="py-3 text-xs text-muted-foreground">
               Recman ID: {c.recmanId} &middot; Opprettet: {c.recmanCreated?.toLocaleDateString("nb-NO")} &middot; Oppdatert: {c.recmanUpdated?.toLocaleDateString("nb-NO")} &middot; Sist synk: {c.lastSyncedAt.toLocaleString("nb-NO")}
             </CardContent>
@@ -230,8 +281,8 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
             ) : (
               <div className="flex flex-wrap gap-2">
                 {skills.map((s) => {
-                  const isEx = ["ex ", "ex-", "atex", "iecex"].some((kw) => s.name.toLowerCase().includes(kw));
-                  const isSafety = ["fallsikring", "gsk", "bosiet"].some((kw) => s.name.toLowerCase().includes(kw));
+                  const isEx = EX_SKILL_KEYWORDS.some((kw) => s.name.toLowerCase().includes(kw));
+                  const isSafety = SAFETY_SKILL_KEYWORDS.some((kw) => s.name.toLowerCase().includes(kw));
                   return (
                     <Badge
                       key={s.skillId}
@@ -248,6 +299,7 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
                 })}
               </div>
             )}
+            {embedded && <RecManReadOnlyNotice field="Kompetanse" />}
           </CardContent>
         </Card>
       )}
@@ -269,6 +321,7 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
                 ))}
               </div>
             )}
+            {embedded && <RecManReadOnlyNotice field="Utdanning" />}
           </CardContent>
         </Card>
       )}
@@ -292,6 +345,7 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
                 ))}
               </div>
             )}
+            {embedded && <RecManReadOnlyNotice field="Arbeidserfaring" />}
           </CardContent>
         </Card>
       )}
@@ -314,9 +368,160 @@ export function CandidateDetail({ candidate: c }: { candidate: Candidate }) {
                 ))}
               </div>
             )}
+            {embedded && <RecManReadOnlyNotice field="Referanser" />}
           </CardContent>
         </Card>
       )}
+
+      {tab === "rediger" && embedded && (
+        <CandidateEditForm candidate={c} onUpdated={onUpdated} />
+      )}
     </div>
+  );
+}
+
+// ─── Edit Form (only shown in embedded/Sheet mode) ─────────────────
+
+function CandidateEditForm({ candidate: c, onUpdated }: { candidate: Candidate; onUpdated?: () => void }) {
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ success: boolean; errors?: Record<string, string[]> } | null>(null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    formData.set("candidateId", c.id);
+
+    startTransition(async () => {
+      const res = await updateCandidate(formData);
+      setResult(res);
+      if (res.success) {
+        onUpdated?.();
+      }
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Pencil className="h-4 w-4" /> Rediger kandidatinfo
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Endringer synkroniseres tilbake til RecMan
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="firstName">Fornavn</Label>
+              <Input id="firstName" name="firstName" defaultValue={c.firstName} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="lastName">Etternavn</Label>
+              <Input id="lastName" name="lastName" defaultValue={c.lastName} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="title">Tittel / stilling</Label>
+            <Input id="title" name="title" defaultValue={c.title || ""} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">E-post</Label>
+              <Input id="email" name="email" type="email" defaultValue={c.email || ""} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefon</Label>
+              <Input id="phone" name="phone" defaultValue={c.phone || ""} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="city">By</Label>
+              <Input id="city" name="city" defaultValue={c.city || ""} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="country">Land</Label>
+              <Input id="country" name="country" defaultValue={c.country || ""} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="nationality">Nasjonalitet</Label>
+              <Input id="nationality" name="nationality" defaultValue={c.nationality || ""} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="gender">Kjønn</Label>
+              <Select name="gender" defaultValue={c.gender || ""}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Velg..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Ikke spesifisert</SelectItem>
+                  <SelectItem value="male">Mann</SelectItem>
+                  <SelectItem value="female">Kvinne</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="dob">Fødselsdato</Label>
+              <Input
+                id="dob"
+                name="dob"
+                type="date"
+                defaultValue={c.dob ? new Date(c.dob).toISOString().split("T")[0] : ""}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rating">Rating (0–5)</Label>
+              <Input id="rating" name="rating" type="number" min={0} max={5} defaultValue={c.rating} />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Beskrivelse</Label>
+            <Textarea id="description" name="description" rows={4} defaultValue={c.description || ""} />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Read-only notice */}
+      <Card className="border-dashed">
+        <CardContent className="py-4">
+          <div className="flex items-start gap-3">
+            <Lock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p className="font-medium">Følgende felter kan kun endres i RecMan:</p>
+              <p>Kompetanse/skills, utdanning, arbeidserfaring, språk, førerkort, referanser og kurs.</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {result && !result.success && result.errors && (
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {Object.values(result.errors).flat().join(". ")}
+        </div>
+      )}
+
+      {result?.success && (
+        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700 flex items-center gap-2">
+          <Check className="h-4 w-4" /> Kandidat oppdatert og synkronisert til RecMan
+        </div>
+      )}
+
+      <Button type="submit" disabled={isPending}>
+        {isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+        Lagre og synkroniser
+      </Button>
+    </form>
   );
 }

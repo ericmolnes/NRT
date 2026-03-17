@@ -194,6 +194,26 @@ export async function unlinkPersonnel(recmanCandidateId: string) {
   revalidatePath("/recman");
 }
 
+// ─── Kandidat-statistikk ────────────────────────────────────────────
+
+export async function getCandidateStats() {
+  const candidates = await db.recmanCandidate.findMany({
+    where: { isEmployee: false },
+    select: { rating: true, skills: true, isContractor: true },
+  });
+
+  let total = 0, rated = 0, withSkills = 0, topRated = 0, contractors = 0;
+  for (const c of candidates) {
+    total++;
+    if (c.rating > 0) rated++;
+    if (c.rating >= 4) topRated++;
+    if (c.isContractor) contractors++;
+    if (Array.isArray(c.skills) && c.skills.length > 0) withSkills++;
+  }
+
+  return { total, rated, withSkills, topRated, contractors };
+}
+
 // ─── Kompetanseoversikt ─────────────────────────────────────────────
 
 export async function getSkillsOverview(employeesOnly: boolean = false) {

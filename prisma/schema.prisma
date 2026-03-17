@@ -668,6 +668,7 @@ model Customer {
 
   contacts           CustomerContact[]
   projects           Project[]
+  suppliers          Supplier[]
 
   @@index([name])
   @@index([poCustomerId])
@@ -713,7 +714,8 @@ model Project {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  jobs           Job[]
+  jobs                 Job[]
+  supplierEvaluations  SupplierEvaluation[]
 
   @@index([customerId])
   @@index([poProjectId])
@@ -881,6 +883,9 @@ model RecmanCandidate {
   employeeStart   DateTime?
   employeeEnd     DateTime?                      // null = aktiv
 
+  // Innleid-status (settes manuelt i NRT)
+  isContractor    Boolean   @default(false)      // Innleid, ikke fast ansatt
+
   // Kompetanse (lagret som JSON for fleksibilitet)
   skills            Json?                        // RecmanSkill[]
   education         Json?                        // RecmanEducation[]
@@ -927,4 +932,283 @@ model RecmanSyncLog {
 
   @@index([status])
   @@index([startedAt])
+}
+
+// ─── ISO 9001: Leverandørkontroll ─────────────────────────────────
+
+model Supplier {
+  id                 String            @id @default(cuid())
+  name               String
+  organizationNumber String?
+  type               SupplierType
+  status             SupplierStatus    @default(PENDING)
+  email              String?
+  phone              String?
+  address            String?
+  city               String?
+  postalCode         String?
+  country            String?           @default("Norge")
+  contactPerson      String?
+  website            String?
+  notes              String?
+  approvedAt         DateTime?
+  approvedById       String?
+  approvedByName     String?
+  expiresAt          DateTime?         // Godkjenning utløper
+  customerId         String?
+  customer           Customer?         @relation(fields: [customerId], references: [id])
+  createdById        String
+  createdByName      String
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  evaluations        SupplierEvaluation[]
+  reviews            SupplierReview[]
+  nonConformances    NonConformance[]
+  documents          DocumentSupplier[]
+  auditLog           SupplierAuditLog[]
+
+  @@index([name])
+  @@index([type])
+  @@index([status])
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+model SupplierReview {
+  id             String         @id @default(cuid())
+  supplierId     String
+  supplier       Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  reviewDate     DateTime
+  nextReviewDate DateTime?
+  reviewedById   String
+  reviewedByName String
+  outcome        SupplierStatus // Ny status etter revisjon
+  summary        String?
+  createdAt      DateTime       @default(now())
+
+  @@index([supplierId])
+  @@index([reviewDate])
+  @@index([nextReviewDate])
+}
+
+model SupplierEvaluation {
+  id                 String    @id @default(cuid())
+  supplierId         String
+  supplier           Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  projectId          String?
+  project            Project?  @relation(fields: [projectId], references: [id])
+  period             String?   // f.eks. "2026-Q1"
+  qualityScore       Int       // 1-5
+  deliveryScore      Int       // 1-5
+  priceScore         Int       // 1-5
+  hseScore           Int       // 1-5
+  communicationScore Int       // 1-5
+  weightedTotal      Float     // Beregnet: (q*0.30 + d*0.25 + p*0.20 + h*0.15 + c*0.10) * 20
+  comment            String?
+  evaluatedById      String
+  evaluatedByName    String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([supplierId])
+  @@index([createdAt])
+  @@index([projectId])
+}
+
+model NonConformance {
+  id             String               @id @default(cuid())
+  ncNumber       String               @unique  // Auto: NC-2026-001
+  supplierId     String
+  supplier       Supplier             @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  severity       Int                  @default(1) // 1=mindre, 2=alvorlig, 3=kritisk
+  status         NonConformanceStatus @default(OPEN)
+  detectedDate   DateTime             @default(now())
+  closedDate     DateTime?
+  closedById     String?
+  closedByName   String?
+  reportedById   String
+  reportedByName String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  actions        CorrectiveAction[]
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([ncNumber])
+  @@index([detectedDate])
+}
+
+model CorrectiveAction {
+  id               String          @id @default(cuid())
+  nonConformanceId String
+  nonConformance   NonConformance  @relation(fields: [nonConformanceId], references: [id], onDelete: Cascade)
+  type             CAPAType
+  description      String
+  responsibleId    String
+  responsibleName  String
+  dueDate          DateTime
+  completedDate    DateTime?
+  status           CAPAStatus      @default(OPEN)
+  verifiedById     String?
+  verifiedByName   String?
+  verifiedDate     DateTime?
+  evidence         String?         // Bevis/dokumentasjon
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([nonConformanceId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model SupplierAuditLog {
+  id         String   @id @default(cuid())
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  action     String   // CREATED, STATUS_CHANGED, EVALUATED, REVIEWED, etc.
+  details    String?  // JSON med endringer
+  userId     String
+  userName   String
+  createdAt  DateTime @default(now())
+
+  @@index([supplierId])
+  @@index([createdAt])
+}
+
+enum SupplierType {
+  MATERIAL
+  SERVICE
+  EQUIPMENT
+  RENTAL
+}
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  CONDITIONAL
+  REJECTED
+  EXPIRED
+}
+
+enum NonConformanceStatus {
+  OPEN
+  INVESTIGATING
+  ACTION_REQUIRED
+  CLOSED
+  CANCELLED
+}
+
+enum CAPAStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  VERIFIED
+  CLOSED
+}
+
+enum CAPAType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+// ─── Dokumentkontroll ─────────────────────────────────────────────
+
+model Document {
+  id                String           @id @default(cuid())
+  docNumber         String           @unique  // f.eks. NRT-PRO-001
+  title             String
+  category          DocumentCategory
+  responsibleId     String
+  responsibleName   String
+  reviewCycleMonths Int?             @default(12)
+  nextReviewDate    DateTime?
+  isActive          Boolean          @default(true)
+  createdById       String
+  createdByName     String
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  versions          DocumentVersion[]
+  supplierLinks     DocumentSupplier[]
+  auditLog          DocumentAuditLog[]
+
+  @@index([docNumber])
+  @@index([category])
+  @@index([responsibleId])
+  @@index([nextReviewDate])
+  @@index([isActive])
+}
+
+model DocumentVersion {
+  id                String                @id @default(cuid())
+  documentId        String
+  document          Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  status            DocumentVersionStatus @default(DRAFT)
+  changeDescription String?
+  fileName          String?
+  fileUrl           String?               // Lokal eller opplastet URL
+  sharePointUrl     String?               // OneDrive/SharePoint URL
+  driveItemId       String?               // Graph API drive item ID
+  isCurrent         Boolean               @default(false)
+  approvedAt        DateTime?
+  approvedById      String?
+  approvedByName    String?
+  createdById       String
+  createdByName     String
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([documentId, versionNumber])
+  @@index([documentId])
+  @@index([status])
+  @@index([isCurrent])
+}
+
+model DocumentSupplier {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  description String?  // f.eks. "ISO 9001 sertifikat"
+  createdAt   DateTime @default(now())
+
+  @@unique([documentId, supplierId])
+  @@index([documentId])
+  @@index([supplierId])
+}
+
+model DocumentAuditLog {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  action     String
+  details    String?
+  userId     String
+  userName   String
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+  @@index([createdAt])
+}
+
+enum DocumentCategory {
+  PROCEDURE
+  WORK_INSTRUCTION
+  FORM_TEMPLATE
+  POLICY
+  RECORD
+  EXTERNAL
+}
+
+enum DocumentVersionStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  OBSOLETE
 }

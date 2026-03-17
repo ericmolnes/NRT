@@ -6,6 +6,7 @@ import { GridRow } from "./grid-row";
 import { GridToolbar } from "./grid-toolbar";
 import { GridSummary } from "./grid-summary";
 import { ContextMenu } from "./context-menu";
+import { AllocationPopover } from "./allocation-popover";
 import { LabelManager } from "./label-manager";
 import { EntryEditor } from "./entry-editor";
 import { useGridSelection } from "./use-grid-selection";
@@ -14,11 +15,24 @@ import { formatDate, getDateRange } from "@/lib/resource-plan-utils";
 import { bulkSetAllocations, clearAllocations } from "@/app/(authenticated)/ressursplan/actions";
 import { AddEntryModal } from "./add-entry-modal";
 
+interface AllocationJob {
+  id: string;
+  job: {
+    id: string;
+    name: string;
+    location: string;
+    status: string;
+    project: { id: string; name: string } | null;
+  };
+}
+
 interface Allocation {
   id: string;
   startDate: string | Date;
   endDate: string | Date;
   label: string;
+  source?: string;
+  jobAssignment?: AllocationJob | null;
 }
 
 interface Entry {
@@ -32,6 +46,13 @@ interface Entry {
   personnel: { id: string; name: string; status: string } | null;
 }
 
+interface ActiveJob {
+  id: string;
+  name: string;
+  location: string;
+  project: { id: string; name: string } | null;
+}
+
 interface ResourcePlanGridProps {
   planId: string;
   initialEntries: Entry[];
@@ -40,6 +61,7 @@ interface ResourcePlanGridProps {
   crews: string[];
   companies: string[];
   locations: string[];
+  activeJobs: ActiveJob[];
 }
 
 const WEEKS_TO_SHOW = 8;
@@ -53,6 +75,7 @@ export function ResourcePlanGrid({
   crews,
   companies,
   locations,
+  activeJobs,
 }: ResourcePlanGridProps) {
   const [entries, setEntries] = useState(initialEntries);
   const [labels, setLabels] = useState(initialLabels);
@@ -61,6 +84,7 @@ export function ResourcePlanGrid({
     crew?: string;
     company?: string;
     location?: string;
+    jobId?: string;
   }>({});
 
   const [windowStart, setWindowStart] = useState(() => {
@@ -82,6 +106,26 @@ export function ResourcePlanGrid({
     entryId: string;
     date: string;
     currentLabel?: string;
+    jobId?: string;
+    jobName?: string;
+    projectId?: string;
+    projectName?: string;
+  } | null>(null);
+
+  const [popover, setPopover] = useState<{
+    x: number;
+    y: number;
+    entryId: string;
+    date: string;
+    label: string;
+    labelColor?: string;
+    labelTextColor?: string;
+    jobId?: string;
+    jobName?: string;
+    projectId?: string;
+    projectName?: string;
+    jobLocation?: string;
+    source?: string;
   } | null>(null);
 
   const gridRef = useRef<HTMLDivElement>(null);
@@ -131,6 +175,7 @@ export function ResourcePlanGrid({
         ...(filters.crew && { crew: filters.crew }),
         ...(filters.company && { company: filters.company }),
         ...(filters.location && { location: filters.location }),
+        ...(filters.jobId && { jobId: filters.jobId }),
       });
 
       const res = await fetch(`/api/resource-plan/grid?${params}`);
@@ -190,10 +235,10 @@ export function ResourcePlanGrid({
     endD.setDate(endD.getDate() + DAYS_TO_SHOW - 1);
     const startMonth = windowStart.toLocaleDateString("nb-NO", { month: "short", day: "numeric" });
     const endMonth = endD.toLocaleDateString("nb-NO", { month: "short", day: "numeric", year: "numeric" });
-    return `${startMonth} - ${endMonth}`;
+    return `${startMonth} \u2013 ${endMonth}`;
   }, [windowStart]);
 
-  // Seleksjon -> tilordne
+  // Selection -> assign
   useEffect(() => {
     if (isSelecting || !selection || !activeTool) return;
     const apply = async () => {
@@ -232,23 +277,68 @@ export function ResourcePlanGrid({
 
   const selectedEntryIds = useMemo(() => new Set(selection?.entryIds ?? []), [selection]);
 
-  // Høyreklikk
+  // Find allocation data for a cell
+  const findAllocationForCell = useCallback(
+    (entryId: string, date: string) => {
+      const entry = entries.find((en) => en.id === entryId);
+      if (!entry) return undefined;
+      for (const alloc of entry.allocations) {
+        const s = new Date(alloc.startDate);
+        const e = new Date(alloc.endDate);
+        const d = new Date(date);
+        if (d >= s && d <= e) return alloc;
+      }
+      return undefined;
+    },
+    [entries]
+  );
+
+  // Context menu
   const handleCellContextMenu = useCallback(
     (e: React.MouseEvent, entryId: string, date: string) => {
       e.preventDefault();
-      const entry = entries.find((en) => en.id === entryId);
-      let currentLabel: string | undefined;
-      if (entry) {
-        for (const alloc of entry.allocations) {
-          const s = new Date(alloc.startDate);
-          const en = new Date(alloc.endDate);
-          const d = new Date(date);
-          if (d >= s && d <= en) { currentLabel = alloc.label; break; }
-        }
-      }
-      setContextMenu({ x: e.clientX, y: e.clientY, entryId, date, currentLabel });
+      setPopover(null);
+      const alloc = findAllocationForCell(entryId, date);
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        entryId,
+        date,
+        currentLabel: alloc?.label,
+        jobId: alloc?.jobAssignment?.job?.id,
+        jobName: alloc?.jobAssignment?.job?.name,
+        projectId: alloc?.jobAssignment?.job?.project?.id,
+        projectName: alloc?.jobAssignment?.job?.project?.name,
+      });
     },
-    [entries]
+    [findAllocationForCell]
+  );
+
+  // Cell click -> show popover (only when no tool active)
+  const handleCellClick = useCallback(
+    (e: React.MouseEvent, entryId: string, date: string) => {
+      if (activeTool) return; // Don't show popover when assigning
+      setContextMenu(null);
+      const alloc = findAllocationForCell(entryId, date);
+      if (!alloc) return;
+      const labelDef = colorMap.get(alloc.label);
+      setPopover({
+        x: e.clientX,
+        y: e.clientY,
+        entryId,
+        date,
+        label: alloc.label,
+        labelColor: labelDef?.color,
+        labelTextColor: labelDef?.textColor,
+        jobId: alloc.jobAssignment?.job?.id,
+        jobName: alloc.jobAssignment?.job?.name,
+        projectId: alloc.jobAssignment?.job?.project?.id,
+        projectName: alloc.jobAssignment?.job?.project?.name,
+        jobLocation: alloc.jobAssignment?.job?.location,
+        source: alloc.source,
+      });
+    },
+    [activeTool, findAllocationForCell, colorMap]
   );
 
   const handleContextAssign = useCallback(async (labelName: string) => {
@@ -274,13 +364,24 @@ export function ResourcePlanGrid({
     fetchGridData();
   }, [contextMenu, fetchGridData]);
 
+  const handlePopoverClear = useCallback(async () => {
+    if (!popover) return;
+    await clearAllocations({
+      entryIds: [popover.entryId],
+      startDate: popover.date,
+      endDate: popover.date,
+    });
+    setPopover(null);
+    fetchGridData();
+  }, [popover, fetchGridData]);
+
   const handleEntryClick = useCallback((entryId: string) => {
     const entry = entries.find((e) => e.id === entryId);
     if (entry) setEditingEntry(entry);
   }, [entries]);
 
   const handleFilterChange = useCallback(
-    (newFilters: { search?: string; crew?: string; company?: string; location?: string }) => {
+    (newFilters: { search?: string; crew?: string; company?: string; location?: string; jobId?: string }) => {
       setFilters((prev) => ({ ...prev, ...newFilters }));
     },
     []
@@ -292,7 +393,6 @@ export function ResourcePlanGrid({
   }, [planId, year]);
 
   const handleAddEntry = useCallback(() => {
-    // Handled by AddEntryModal component
     fetchGridData();
   }, [fetchGridData]);
 
@@ -305,12 +405,13 @@ export function ResourcePlanGrid({
   }, [planId]);
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg border shadow-sm overflow-hidden">
+    <div className="flex flex-col h-full bg-white rounded-lg border border-gray-200/80 shadow-sm overflow-hidden">
       <GridToolbar
         crews={crews}
         companies={companies}
         locations={locations}
         labels={labels}
+        activeJobs={activeJobs}
         activeTool={activeTool}
         onToolChange={setActiveTool}
         onFilterChange={handleFilterChange}
@@ -320,6 +421,7 @@ export function ResourcePlanGrid({
         onAddEntry={handleAddEntry}
         planId={planId}
         currentPeriodLabel={currentPeriodLabel}
+        activeFilters={filters}
       />
 
       <div
@@ -329,24 +431,25 @@ export function ResourcePlanGrid({
         onMouseLeave={handleMouseUp}
       >
         {isLoading && (
-          <div className="absolute inset-0 bg-white/50 z-50 flex items-center justify-center">
-            <div className="text-sm text-muted-foreground">Laster...</div>
+          <div className="absolute inset-0 bg-white/60 z-50 flex items-center justify-center">
+            <div className="text-sm text-muted-foreground animate-pulse">Laster...</div>
           </div>
         )}
 
         <div
           className="grid"
-          style={{ gridTemplateColumns: `180px 80px 60px 90px repeat(${dates.length}, 28px)` }}
+          style={{ gridTemplateColumns: `200px 80px 70px 100px repeat(${dates.length}, 32px)` }}
         >
           <GridHeader dates={dates} todayStr={todayStr} />
 
           {Array.from(groupedEntries.entries()).map(([crew, crewEntries]) => (
             <div key={crew} className="contents">
               <div
-                className="h-6 bg-gray-600 text-white text-[11px] font-semibold flex items-center px-2"
-                style={{ gridColumn: "1 / -1" }}
+                className="h-7 bg-[oklch(0.16_0.035_250)] text-white text-[11px] font-semibold flex items-center px-3 tracking-wide"
+                style={{ gridColumn: "1 / -1", fontFamily: "var(--font-display)" }}
               >
-                {crew} ({crewEntries.length})
+                {crew}
+                <span className="ml-1.5 text-white/50 font-normal">({crewEntries.length})</span>
               </div>
               {crewEntries.map((entry) => (
                 <GridRow
@@ -356,6 +459,7 @@ export function ResourcePlanGrid({
                   crew={entry.crew}
                   company={entry.company}
                   location={entry.location}
+                  personnelId={entry.personnel?.id ?? null}
                   allocations={entry.allocations}
                   dates={dates}
                   weekendSet={weekendSet}
@@ -367,6 +471,7 @@ export function ResourcePlanGrid({
                   onCellMouseEnter={handleCellMouseEnter}
                   onCellContextMenu={handleCellContextMenu}
                   onEntryClick={handleEntryClick}
+                  onCellClick={handleCellClick}
                 />
               ))}
             </div>
@@ -382,9 +487,32 @@ export function ResourcePlanGrid({
           y={contextMenu.y}
           labels={labels}
           currentLabel={contextMenu.currentLabel}
+          jobId={contextMenu.jobId}
+          jobName={contextMenu.jobName}
+          projectId={contextMenu.projectId}
+          projectName={contextMenu.projectName}
           onAssign={handleContextAssign}
           onClear={handleContextClear}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {popover && (
+        <AllocationPopover
+          x={popover.x}
+          y={popover.y}
+          label={popover.label}
+          labelColor={popover.labelColor}
+          labelTextColor={popover.labelTextColor}
+          jobId={popover.jobId}
+          jobName={popover.jobName}
+          projectId={popover.projectId}
+          projectName={popover.projectName}
+          jobLocation={popover.jobLocation}
+          date={popover.date}
+          source={popover.source}
+          onClear={handlePopoverClear}
+          onClose={() => setPopover(null)}
         />
       )}
 

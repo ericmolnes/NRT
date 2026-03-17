@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getEvaluationLinkByToken } from "@/lib/queries/evaluation-links";
-import { getAllPersonnel } from "@/lib/queries/evaluations";
+import { getPersonnelForPublicForm } from "@/lib/queries/evaluations";
 import { PublicEvaluationForm } from "@/components/skjema/public-evaluation-form";
 import { PublicCustomFieldsForm } from "@/components/skjema/public-custom-fields-form";
 
@@ -36,8 +36,8 @@ export default async function PublicFormPage({ params }: PageProps) {
   }
 
   const personnelList = link.personnelId
-    ? [link.personnel!]
-    : await getAllPersonnel();
+    ? [{ id: link.personnel!.id, name: link.personnel!.name, role: link.personnel!.role }]
+    : await getPersonnelForPublicForm();
 
   return (
     <div className="w-full max-w-2xl space-y-6 px-4 py-8">
