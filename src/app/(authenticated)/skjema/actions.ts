@@ -76,10 +76,14 @@ export async function createEvaluationLink(
     }
   }
 
+  // Role filter: "Ansatt" | "Innleid" | empty
+  const roleFilter = (formData.get("roleFilter") as string) || null;
+
   await db.evaluationLink.create({
     data: {
       personnelId: personnelIds.length === 1 ? personnelIds[0] : undefined,
       personnelIds: personnelIds.length > 1 ? personnelIds : undefined,
+      roleFilter,
       title: parsed.data.title,
       formType: parsed.data.formType,
       authMode: parsed.data.authMode,

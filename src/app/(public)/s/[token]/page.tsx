@@ -75,7 +75,7 @@ export default async function PublicFormPage({ params }: PageProps) {
       orderBy: { name: "asc" },
     });
   } else {
-    personnelList = await getPersonnelForPublicForm();
+    personnelList = await getPersonnelForPublicForm(link.roleFilter);
   }
 
   const formContent = (

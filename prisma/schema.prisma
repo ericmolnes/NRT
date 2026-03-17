@@ -74,6 +74,7 @@ model EvaluationLink {
   criteria     Json?          // Custom criteria: [{key, label, description}], null = defaults
   personnelId  String?        // Single person lock (legacy)
   personnelIds Json?          // Multiple person lock: ["id1","id2"], null = all
+  roleFilter   String?        // "Ansatt" | "Innleid" | null (all)
   categoryId   String?
   createdById String
   createdBy   String

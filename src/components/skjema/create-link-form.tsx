@@ -528,6 +528,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                 <option value="Ansatt">Ansatte</option>
                 <option value="Innleid">Innleide</option>
               </select>
+              <input type="hidden" name="roleFilter" value={roleFilter} />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <label className="text-xs text-muted-foreground">
