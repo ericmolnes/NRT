@@ -107,42 +107,84 @@ export default async function EvaluationDetailPage({ params }: PageProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {EVALUATION_CRITERIA.map((criterion) => {
-                const value =
-                  evaluation[
-                    criterion.key as keyof typeof evaluation
-                  ] as number;
-                return (
-                  <div key={criterion.key} className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm font-medium">
-                          {criterion.label}
-                        </span>
-                        <p className="text-xs text-muted-foreground">
-                          {criterion.description}
-                        </p>
+              {(() => {
+                // If criteriaScores JSON exists, use it for display
+                const customScores = (evaluation as unknown as Record<string, unknown>).criteriaScores as Record<string, number> | null;
+                if (customScores && Object.keys(customScores).length > 0) {
+                  // Separate parent scores (no dot) and sub-scores (parent.child)
+                  const parentKeys = Object.keys(customScores).filter((k) => !k.includes("."));
+                  const subScores = Object.entries(customScores).filter(([k]) => k.includes("."));
+
+                  return parentKeys.map((key) => {
+                    const value = customScores[key];
+                    const children = subScores.filter(([k]) => k.startsWith(key + "."));
+                    return (
+                      <div key={key} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">{key}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{value}/10</span>
+                            <ScoreBadge score={value} />
+                            {children.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground">(snitt)</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted">
+                          <div
+                            className={`h-2 rounded-full transition-all ${
+                              value >= 8 ? "bg-emerald-500" : value >= 5 ? "bg-amber-500" : "bg-red-500"
+                            }`}
+                            style={{ width: `${value * 10}%` }}
+                          />
+                        </div>
+                        {children.length > 0 && (
+                          <div className="ml-4 mt-1 space-y-1 border-l-2 border-muted pl-3">
+                            {children.map(([subKey, subVal]) => {
+                              const subLabel = subKey.split(".").pop() ?? subKey;
+                              return (
+                                <div key={subKey} className="flex items-center justify-between">
+                                  <span className="text-xs text-muted-foreground">{subLabel}</span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-medium tabular-nums">{subVal}/10</span>
+                                    <ScoreBadge score={subVal} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">{value}/10</span>
-                        <ScoreBadge score={value} />
+                    );
+                  });
+                }
+                // Default: use fixed columns
+                return EVALUATION_CRITERIA.map((criterion) => {
+                  const value = evaluation[criterion.key as keyof typeof evaluation] as number;
+                  return (
+                    <div key={criterion.key} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm font-medium">{criterion.label}</span>
+                          <p className="text-xs text-muted-foreground">{criterion.description}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{value}/10</span>
+                          <ScoreBadge score={value} />
+                        </div>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            value >= 8 ? "bg-emerald-500" : value >= 5 ? "bg-amber-500" : "bg-red-500"
+                          }`}
+                          style={{ width: `${value * 10}%` }}
+                        />
                       </div>
                     </div>
-                    <div className="h-2 rounded-full bg-muted">
-                      <div
-                        className={`h-2 rounded-full transition-all ${
-                          value >= 8
-                            ? "bg-emerald-500"
-                            : value >= 5
-                              ? "bg-amber-500"
-                              : "bg-red-500"
-                        }`}
-                        style={{ width: `${value * 10}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           </CardContent>
         </Card>

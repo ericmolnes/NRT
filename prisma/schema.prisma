@@ -34,21 +34,22 @@ model Personnel {
 }
 
 model Evaluation {
-  id            String    @id @default(cuid())
-  score         Int
-  hpiSafety     Int       @default(5)
-  competence    Int       @default(5)
-  collaboration Int       @default(5)
-  workEthic     Int       @default(5)
-  independence  Int       @default(5)
-  punctuality   Int       @default(5)
-  comment       String?
-  evaluatorId   String
-  evaluatorName String
-  personnelId   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  personnel     Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  score           Int
+  hpiSafety       Int       @default(5)
+  competence      Int       @default(5)
+  collaboration   Int       @default(5)
+  workEthic       Int       @default(5)
+  independence    Int       @default(5)
+  punctuality     Int       @default(5)
+  criteriaScores  Json?     // Dynamic scores: {key: score}, used when custom criteria
+  comment         String?
+  evaluatorId     String
+  evaluatorName   String
+  personnelId     String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  personnel       Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
 
   @@index([personnelId])
   @@index([evaluatorId])
@@ -56,12 +57,16 @@ model Evaluation {
 }
 
 model EvaluationLink {
-  id          String         @id @default(cuid())
-  token       String         @unique @default(cuid())
-  title       String
-  formType    FormLinkType   @default(EVALUATION)
-  personnelId String?
-  categoryId  String?
+  id           String         @id @default(cuid())
+  token        String         @unique @default(cuid())
+  title        String
+  formType     FormLinkType   @default(EVALUATION)
+  authMode     FormAuthMode   @default(NONE)
+  password     String?        // Hashed password for PASSWORD mode
+  criteria     Json?          // Custom criteria: [{key, label, description}], null = defaults
+  personnelId  String?        // Single person lock (legacy)
+  personnelIds Json?          // Multiple person lock: ["id1","id2"], null = all
+  categoryId   String?
   createdById String
   createdBy   String
   expiresAt   DateTime?
@@ -70,10 +75,29 @@ model EvaluationLink {
   createdAt   DateTime       @default(now())
   category    FieldCategory? @relation(fields: [categoryId], references: [id])
   personnel   Personnel?     @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
 
   @@index([token])
   @@index([personnelId])
   @@index([categoryId])
+}
+
+model FormSubmission {
+  id               String         @id @default(cuid())
+  evaluationLinkId String
+  evaluationLink   EvaluationLink @relation(fields: [evaluationLinkId], references: [id], onDelete: Cascade)
+  evaluationId     String?        // Links to Evaluation if form type is EVALUATION
+  authMethod       FormAuthMode
+  microsoftEmail   String?
+  microsoftName    String?
+  microsoftEntraId String?
+  ipAddress        String?
+  userAgent        String?
+  submittedAt      DateTime       @default(now())
+
+  @@index([evaluationLinkId])
+  @@index([microsoftEmail])
+  @@index([submittedAt])
 }
 
 model Note {
@@ -596,9 +620,28 @@ enum PersonnelStatus {
   ARCHIVED
 }
 
+model EvaluationTemplate {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  criteria    Json     // Array of {key, label, description, children?}
+  createdById String
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([name])
+}
+
 enum FormLinkType {
   EVALUATION
   CUSTOM_FIELDS
+}
+
+enum FormAuthMode {
+  NONE
+  PASSWORD
+  MICROSOFT
 }
 
 enum FieldType {
@@ -1211,4 +1254,15 @@ enum DocumentVersionStatus {
   REVIEW
   APPROVED
   OBSOLETE
+}
+
+model ApiRateLimit {
+  id        String   @id @default(cuid())
+  service   String
+  date      String   // YYYY-MM-DD
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([service, date])
+  @@index([service, date])
 }

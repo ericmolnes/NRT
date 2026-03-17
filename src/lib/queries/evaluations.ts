@@ -65,11 +65,14 @@ export async function getAllPersonnel() {
   });
 }
 
-/** Minimal personnel data for unauthenticated public forms (evaluation links). */
+/** Minimal personnel data for unauthenticated public forms (evaluation links).
+ *  Includes both active employees and contractors (innleide). */
 export async function getPersonnelForPublicForm() {
   return db.personnel.findMany({
     select: { id: true, name: true, role: true },
-    where: { status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+    },
     orderBy: { name: "asc" },
   });
 }

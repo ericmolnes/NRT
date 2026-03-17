@@ -7,6 +7,7 @@ import type {
   RecmanJob,
 } from "./types";
 import { COMPANY_FIELDS, PROJECT_FIELDS, JOB_FIELDS } from "./types";
+import { checkRateLimit } from "./rate-limiter";
 
 const API_KEY = () => process.env.RECMAN_API_KEY;
 const API_URL = () => process.env.RECMAN_API_URL || "https://api.recman.io";
@@ -23,6 +24,7 @@ export async function recmanGet<T = RecmanCandidate>(
   fields: string,
   opts?: GetOptions
 ): Promise<RecmanGetResponse<T>> {
+  await checkRateLimit();
   const key = API_KEY();
   if (!key) throw new Error("RECMAN_API_KEY er ikke satt");
 
@@ -54,6 +56,7 @@ export async function recmanPost(
   operation: "insert" | "update" | "delete",
   data: Record<string, unknown>
 ): Promise<RecmanPostResponse> {
+  await checkRateLimit();
   const key = API_KEY();
   if (!key) throw new Error("RECMAN_API_KEY er ikke satt");
 
@@ -108,6 +111,7 @@ async function getAllPaginated<T>(scope: string, fields: string): Promise<T[]> {
 }
 
 export async function getCorporations(): Promise<Record<string, string>> {
+  await checkRateLimit();
   const key = API_KEY();
   if (!key) return {};
   const url = `${API_URL()}/v2/get/?key=${key}&scope=corporation&fields=name`;

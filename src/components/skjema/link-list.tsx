@@ -12,13 +12,15 @@ import {
   deleteEvaluationLink,
   type ActionState,
 } from "@/app/(authenticated)/skjema/actions";
-import { Copy, Trash2, Pause, Play } from "lucide-react";
+import { Copy, Trash2, Pause, Play, Lock, Shield, Globe } from "lucide-react";
 
 interface EvaluationLink {
   id: string;
   token: string;
   title: string;
   formType: string;
+  authMode: string;
+  personnelIds: unknown;
   active: boolean;
   usageCount: number;
   expiresAt: Date | null;
@@ -34,6 +36,12 @@ interface EvaluationLink {
     name: string;
   } | null;
 }
+
+const AUTH_MODE_BADGE: Record<string, { icon: typeof Globe; label: string; className: string }> = {
+  NONE: { icon: Globe, label: "Åpent", className: "bg-gray-100 text-gray-600 border-gray-200" },
+  PASSWORD: { icon: Lock, label: "Passord", className: "bg-amber-100 text-amber-700 border-amber-200" },
+  MICROSOFT: { icon: Shield, label: "Microsoft", className: "bg-blue-100 text-blue-700 border-blue-200" },
+};
 
 interface LinkListProps {
   links: EvaluationLink[];
@@ -95,6 +103,17 @@ function LinkCard({ link }: { link: EvaluationLink }) {
               ) : (
                 <Badge variant="secondary" className="text-xs">Deaktivert</Badge>
               )}
+              {link.authMode && link.authMode !== "NONE" && (() => {
+                const mode = AUTH_MODE_BADGE[link.authMode];
+                if (!mode) return null;
+                const Icon = mode.icon;
+                return (
+                  <Badge className={`${mode.className} text-xs gap-1`}>
+                    <Icon className="h-3 w-3" />
+                    {mode.label}
+                  </Badge>
+                );
+              })()}
             </div>
             <p className="text-sm text-muted-foreground">
               {link.personnel ? (
@@ -102,6 +121,8 @@ function LinkCard({ link }: { link: EvaluationLink }) {
                   For: <span className="font-medium">{link.personnel.name}</span>
                   <span className="hidden sm:inline"> ({link.personnel.role})</span>
                 </>
+              ) : Array.isArray(link.personnelIds) && link.personnelIds.length > 0 ? (
+                <span>Begrenset til {link.personnelIds.length} personer</span>
               ) : (
                 "Brukeren velger personell selv"
               )}

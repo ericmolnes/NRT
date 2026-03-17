@@ -5,12 +5,18 @@ export const createFormLinkSchema = z
     personnelId: z.string().optional(),
     title: z.string().min(1, "Tittel er påkrevd"),
     formType: z.enum(["EVALUATION", "CUSTOM_FIELDS"]),
+    authMode: z.enum(["NONE", "PASSWORD", "MICROSOFT"]).default("NONE"),
+    password: z.string().optional(),
     categoryId: z.string().optional(),
     expiresAt: z.string().optional(),
   })
   .refine(
     (d) => d.formType !== "CUSTOM_FIELDS" || (d.categoryId && d.categoryId.length > 0),
     { message: "Velg en feltkategori", path: ["categoryId"] }
+  )
+  .refine(
+    (d) => d.authMode !== "PASSWORD" || (d.password && d.password.length >= 4),
+    { message: "Passord må være minst 4 tegn", path: ["password"] }
   );
 
 // Keep old name as alias for backward compat

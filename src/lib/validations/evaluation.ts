@@ -42,6 +42,22 @@ export const EVALUATION_CRITERIA = [
   { key: "punctuality", label: "Punktlighet", description: "Møter opp i tide, overholder tidsfrister" },
 ] as const;
 
+/** Shared criterion type for evaluation forms */
+export interface Criterion {
+  key: string;
+  label: string;
+  description: string;
+  children?: Criterion[];
+}
+
+/** Default criteria with children support */
+export const DEFAULT_CRITERIA: Criterion[] = EVALUATION_CRITERIA.map((c) => ({
+  key: c.key,
+  label: c.label,
+  description: c.description,
+  children: [],
+}));
+
 /** Beregn totalsnitt fra kriterieverdier */
 export function calculateTotalScore(criteria: Record<string, number>): number {
   const values = EVALUATION_CRITERIA.map((c) => criteria[c.key] ?? 0);

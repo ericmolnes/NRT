@@ -148,24 +148,26 @@ export function PersonnelEvaluationsTab({
                     </span>
                   </div>
                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                    {EVALUATION_CRITERIA.map((criterion) => {
-                      const value = evaluation[
-                        criterion.key as keyof typeof evaluation
-                      ] as number;
-                      return (
-                        <div
-                          key={criterion.key}
-                          className="flex items-center justify-between rounded bg-muted/50 px-2 py-1"
-                        >
-                          <span className="text-[10px] text-muted-foreground truncate mr-1">
-                            {criterion.label}
-                          </span>
-                          <span className="text-xs font-medium">
-                            {value}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    {(() => {
+                      const customScores = (evaluation as unknown as Record<string, unknown>).criteriaScores as Record<string, number> | null;
+                      if (customScores && Object.keys(customScores).length > 0) {
+                        return Object.entries(customScores).map(([key, value]) => (
+                          <div key={key} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1">
+                            <span className="text-[10px] text-muted-foreground truncate mr-1">{key}</span>
+                            <span className="text-xs font-medium">{value}</span>
+                          </div>
+                        ));
+                      }
+                      return EVALUATION_CRITERIA.map((criterion) => {
+                        const value = evaluation[criterion.key as keyof typeof evaluation] as number;
+                        return (
+                          <div key={criterion.key} className="flex items-center justify-between rounded bg-muted/50 px-2 py-1">
+                            <span className="text-[10px] text-muted-foreground truncate mr-1">{criterion.label}</span>
+                            <span className="text-xs font-medium">{value}</span>
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                   {evaluation.comment && (
                     <p className="text-xs mt-2 text-muted-foreground whitespace-pre-wrap">
