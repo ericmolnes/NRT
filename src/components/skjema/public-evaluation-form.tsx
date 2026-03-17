@@ -106,7 +106,7 @@ export function PublicEvaluationForm({
                 </option>
                 {personnel.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.role}
+                    {p.name}
                   </option>
                 ))}
               </select>

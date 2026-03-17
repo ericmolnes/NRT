@@ -74,40 +74,40 @@ function LinkCard({ link }: { link: EvaluationLink }) {
 
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1 flex-1">
+      <CardContent className="pt-4 pb-4 sm:pt-6">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
+          <div className="space-y-1 flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium">{link.title}</span>
-              <Badge variant="secondary">
+              <span className="font-medium text-sm sm:text-base">{link.title}</span>
+              <Badge variant="secondary" className="text-xs">
                 {link.formType === "CUSTOM_FIELDS"
                   ? link.category?.name ?? "Felt"
                   : "Evaluering"}
               </Badge>
               {link.active && !isExpired ? (
-                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">
+                <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">
                   Aktiv
                 </Badge>
               ) : isExpired ? (
-                <Badge className="bg-red-100 text-red-700 border-red-200">
+                <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">
                   Utløpt
                 </Badge>
               ) : (
-                <Badge variant="secondary">Deaktivert</Badge>
+                <Badge variant="secondary" className="text-xs">Deaktivert</Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground">
               {link.personnel ? (
                 <>
-                  For: <span className="font-medium">{link.personnel.name}</span>{" "}
-                  ({link.personnel.role})
+                  For: <span className="font-medium">{link.personnel.name}</span>
+                  <span className="hidden sm:inline"> ({link.personnel.role})</span>
                 </>
               ) : (
                 "Brukeren velger personell selv"
               )}
             </p>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>Opprettet av {link.createdBy}</span>
+            <div className="flex items-center gap-2 sm:gap-4 text-xs text-muted-foreground flex-wrap">
+              <span className="hidden sm:inline">Opprettet av {link.createdBy}</span>
               <span>{link.createdAt.toLocaleDateString("nb-NO")}</span>
               <span>{link.usageCount} svar</span>
               {link.expiresAt && (

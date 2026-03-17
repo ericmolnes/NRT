@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import { getCorporations } from "@/lib/recman/client";
 
 interface PersonnelFilters {
   search?: string;
@@ -15,11 +16,7 @@ export async function getPersonnelList(filters?: PersonnelFilters) {
     where.name = { contains: filters.search, mode: "insensitive" };
   }
   if (filters?.department) {
-    where.OR = [
-      { department: filters.department },
-      { poEmployee: { department: filters.department } },
-      { recmanCandidate: { corporationId: filters.department } },
-    ];
+    where.recmanCandidate = { corporationId: filters.department };
   }
   if (filters?.status) {
     where.status = filters.status as Prisma.EnumPersonnelStatusFilter;
@@ -101,31 +98,25 @@ export async function getPersonnelSyncStats() {
   return { total, active, poLinked, recmanLinked };
 }
 
-export async function getDistinctDepartments() {
-  // Hent avdelinger fra PowerOffice og Recman (ikke fra manuelt Personnel.department)
-  const [poDepts, rcCorps] = await Promise.all([
-    db.pOEmployee.findMany({
-      where: { department: { not: null } },
-      select: { department: true },
-      distinct: ["department"],
-    }),
-    // Recman bruker corporationId som "avdeling/selskap"
+export type Department = { value: string; label: string };
+
+export async function getDistinctDepartments(): Promise<Department[]> {
+  const [rcCorps, corpNames] = await Promise.all([
     db.recmanCandidate.findMany({
       where: { isEmployee: true, corporationId: { not: null } },
       select: { corporationId: true },
       distinct: ["corporationId"],
     }),
+    getCorporations(),
   ]);
 
-  const depts = new Set<string>();
-  for (const po of poDepts) {
-    if (po.department) depts.add(po.department);
-  }
-  for (const rc of rcCorps) {
-    if (rc.corporationId) depts.add(rc.corporationId);
-  }
-
-  return [...depts].sort();
+  return rcCorps
+    .filter((rc) => rc.corporationId != null)
+    .map((rc) => ({
+      value: rc.corporationId!,
+      label: corpNames[rc.corporationId!] ?? rc.corporationId!,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "nb"));
 }
 
 export async function getPersonnelJobsAndResources(personnelId: string) {

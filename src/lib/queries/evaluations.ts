@@ -55,6 +55,12 @@ export async function getEvaluationStats() {
 
 export async function getAllPersonnel() {
   return db.personnel.findMany({
+    select: {
+      id: true,
+      name: true,
+      recmanCandidate: { select: { corporationId: true } },
+    },
+    where: { status: "ACTIVE" },
     orderBy: { name: "asc" },
   });
 }

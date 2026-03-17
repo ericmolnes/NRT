@@ -1,7 +1,19 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 
-export async function getEvaluationLinks() {
+interface EvaluationLinkFilters {
+  department?: string;
+}
+
+export async function getEvaluationLinks(filters?: EvaluationLinkFilters) {
+  const where: Prisma.EvaluationLinkWhereInput = {};
+
+  if (filters?.department) {
+    where.personnel = { recmanCandidate: { corporationId: filters.department } };
+  }
+
   return db.evaluationLink.findMany({
+    where,
     include: {
       personnel: true,
       category: true,

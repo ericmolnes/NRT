@@ -1,33 +1,20 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useUpdateSearchParam } from "@/hooks/use-search-param";
+import type { Department } from "@/lib/queries/personnel";
 
 interface PersonnelFiltersProps {
-  departments: string[];
+  departments: Department[];
 }
 
 export function PersonnelFilters({ departments }: PersonnelFiltersProps) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const updateParam = useCallback(
-    (key: string, value: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (value) {
-        params.set(key, value);
-      } else {
-        params.delete(key);
-      }
-      router.push(`?${params.toString()}`);
-    },
-    [router, searchParams]
-  );
+  const { updateParam, searchParams } = useUpdateSearchParam();
 
   return (
     <div className="flex flex-wrap gap-4">
       <Input
+        key={searchParams.get("search") ?? ""}
         placeholder="Søk etter navn..."
         defaultValue={searchParams.get("search") ?? ""}
         onChange={(e) => updateParam("search", e.target.value)}
@@ -41,8 +28,8 @@ export function PersonnelFilters({ departments }: PersonnelFiltersProps) {
         >
           <option value="">Alle avdelinger</option>
           {departments.map((dept) => (
-            <option key={dept} value={dept}>
-              {dept}
+            <option key={dept.value} value={dept.value}>
+              {dept.label}
             </option>
           ))}
         </select>

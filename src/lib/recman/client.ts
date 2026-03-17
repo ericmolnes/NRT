@@ -107,6 +107,21 @@ async function getAllPaginated<T>(scope: string, fields: string): Promise<T[]> {
   return all;
 }
 
+export async function getCorporations(): Promise<Record<string, string>> {
+  const key = API_KEY();
+  if (!key) return {};
+  const url = `${API_URL()}/v2/get/?key=${key}&scope=corporation&fields=name`;
+  const res = await fetch(url, { next: { revalidate: 3600 } });
+  if (!res.ok) return {};
+  const data = await res.json();
+  if (!data.success) return {};
+  const map: Record<string, string> = {};
+  for (const corp of Object.values(data.data) as Array<{ corporationId: string; name: string }>) {
+    map[corp.corporationId] = corp.name;
+  }
+  return map;
+}
+
 export function getAllCompanies(): Promise<RecmanCompany[]> {
   return getAllPaginated<RecmanCompany>("company", COMPANY_FIELDS);
 }

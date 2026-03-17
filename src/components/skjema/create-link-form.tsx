@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +14,12 @@ import {
   createEvaluationLink,
   type ActionState,
 } from "@/app/(authenticated)/skjema/actions";
+import type { Department } from "@/lib/queries/personnel";
 
 interface Personnel {
   id: string;
   name: string;
-  role: string;
+  recmanCandidate: { corporationId: string | null } | null;
 }
 
 interface Category {
@@ -29,14 +30,21 @@ interface Category {
 interface CreateLinkFormProps {
   personnel: Personnel[];
   categories: Category[];
+  departments: Department[];
 }
 
-export function CreateLinkForm({ personnel, categories }: CreateLinkFormProps) {
+export function CreateLinkForm({ personnel, categories, departments }: CreateLinkFormProps) {
   const [state, formAction, isPending] = useActionState<ActionState, FormData>(
     createEvaluationLink,
     {}
   );
   const [formType, setFormType] = useState("EVALUATION");
+  const [deptFilter, setDeptFilter] = useState("");
+
+  const filteredPersonnel = useMemo(() => {
+    if (!deptFilter) return personnel;
+    return personnel.filter((p) => p.recmanCandidate?.corporationId === deptFilter);
+  }, [personnel, deptFilter]);
 
   return (
     <Card>
@@ -104,6 +112,24 @@ export function CreateLinkForm({ personnel, categories }: CreateLinkFormProps) {
                 )}
               </div>
             )}
+            {departments.length > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="deptFilter">Filtrer på avdeling</Label>
+                <select
+                  id="deptFilter"
+                  className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm"
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                >
+                  <option value="">Alle avdelinger</option>
+                  {departments.map((d) => (
+                    <option key={d.value} value={d.value}>
+                      {d.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="space-y-1">
               <Label htmlFor="personnelId">
                 Fastlåst til personell (valgfri)
@@ -115,9 +141,9 @@ export function CreateLinkForm({ personnel, categories }: CreateLinkFormProps) {
                 defaultValue=""
               >
                 <option value="">Brukeren velger selv</option>
-                {personnel.map((p) => (
+                {filteredPersonnel.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} — {p.role}
+                    {p.name}
                   </option>
                 ))}
               </select>

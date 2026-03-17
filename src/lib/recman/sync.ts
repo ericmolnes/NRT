@@ -158,6 +158,8 @@ async function upsertCandidate(c: RecmanCandidate) {
 
   // Auto-match or create Personnel for employees only
   if (hasEmployee) {
+    const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
+
     if (!candidate.personnelId) {
       const personnelId = await findOrCreatePersonnel({
         firstName: c.firstName,
@@ -171,10 +173,29 @@ async function upsertCandidate(c: RecmanCandidate) {
         where: { id: candidate.id },
         data: { personnelId },
       });
+
+      if (targetStatus !== "ACTIVE") {
+        await db.personnel.update({
+          where: { id: personnelId },
+          data: { status: targetStatus },
+        });
+      }
     } else {
       await enrichPersonnel(candidate.personnelId, {
         phone: c.mobilePhone || c.phone,
       });
+
+      // Only update status if it actually changed
+      const current = await db.personnel.findUnique({
+        where: { id: candidate.personnelId },
+        select: { status: true },
+      });
+      if (current && current.status !== targetStatus) {
+        await db.personnel.update({
+          where: { id: candidate.personnelId },
+          data: { status: targetStatus },
+        });
+      }
     }
   }
 }

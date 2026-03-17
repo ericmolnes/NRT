@@ -46,8 +46,8 @@ export default async function PublicFormPage({ params }: PageProps) {
         {link.personnel ? (
           <p className="text-muted-foreground">
             For{" "}
-            <span className="font-medium">{link.personnel.name}</span> (
-            {link.personnel.role})
+            <span className="font-medium">{link.personnel.name}</span>
+            <span className="hidden sm:inline"> ({link.personnel.role})</span>
           </p>
         ) : (
           <p className="text-muted-foreground">
