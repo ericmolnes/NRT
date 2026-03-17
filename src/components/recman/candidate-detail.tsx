@@ -41,6 +41,7 @@ import {
 import Link from "next/link";
 import { updateCandidate } from "@/app/(authenticated)/personell/kandidater/actions";
 import { EX_SKILL_KEYWORDS, SAFETY_SKILL_KEYWORDS } from "@/lib/recman/types";
+import { ScoreBadge } from "@/components/evaluering/score-badge";
 
 type Skill = { skillId: string; name: string };
 type Education = { educationId: string; schoolName: string; type: string; degree: string; location: string; startDate: string; endDate: string };
@@ -79,7 +80,18 @@ type Candidate = {
   recmanCreated: Date | null;
   recmanUpdated: Date | null;
   lastSyncedAt: Date;
-  personnel: { id: string; name: string } | null;
+  personnel: {
+    id: string;
+    name: string;
+    evaluations?: Array<{
+      id: string;
+      score: number;
+      evaluatorName: string;
+      comment: string | null;
+      createdAt: Date;
+    }>;
+  } | null;
+  contractorPeriods?: Array<{ id: string; startDate: Date; endDate: Date | null; company: string | null; notes: string | null }>;
 };
 
 const levelLabels: Record<string, string> = {
@@ -111,6 +123,7 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
     { id: "utdanning", label: "Utdanning" },
     { id: "erfaring", label: "Erfaring" },
     { id: "referanser", label: "Referanser" },
+    { id: "evalueringer", label: "Evalueringer" },
   ];
   const tabs = embedded
     ? [...baseTabs, { id: "rediger", label: "Rediger" }]
@@ -125,6 +138,9 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
   const licenses = (c.driversLicense as string[]) || [];
   const refs = (c.references as Reference[]) || [];
   const attrs = (c.attributes as Attribute[]) || [];
+  const contractorPeriods = (c.contractorPeriods || []).sort(
+    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+  );
 
   return (
     <div className="space-y-6">
@@ -211,6 +227,33 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
                 ) : (
                   <div className="text-green-600 font-medium">Aktiv ansatt</div>
                 )}
+              </CardContent>
+            </Card>
+          )}
+
+          {contractorPeriods.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle className="text-sm flex items-center gap-2"><HardHat className="h-4 w-4" /> Innleid-historikk</CardTitle></CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {contractorPeriods.map((p, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    {!p.endDate ? (
+                      <Badge className="text-xs bg-green-600">Aktiv</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">Avsluttet</Badge>
+                    )}
+                    <div>
+                      <span>
+                        {new Date(p.startDate).toLocaleDateString("nb-NO")}
+                        {" \u2013 "}
+                        {p.endDate ? new Date(p.endDate).toLocaleDateString("nb-NO") : "P\u00e5g\u00e5ende"}
+                      </span>
+                      {p.company && (
+                        <span className="text-muted-foreground ml-2">({p.company})</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
@@ -369,6 +412,43 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
               </div>
             )}
             {embedded && <RecManReadOnlyNotice field="Referanser" />}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === "evalueringer" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Star className="h-4 w-4" /> Evalueringer
+              {c.personnel?.evaluations && c.personnel.evaluations.length > 0 && (
+                <span className="text-muted-foreground font-normal">({c.personnel.evaluations.length})</span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!c.personnel ? (
+              <p className="text-sm text-muted-foreground">Ikke koblet til personellkort</p>
+            ) : !c.personnel.evaluations || c.personnel.evaluations.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Ingen evalueringer registrert</p>
+            ) : (
+              <div className="space-y-3">
+                {c.personnel.evaluations.map((ev) => (
+                  <div key={ev.id} className="border-l-2 pl-4 py-2 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{ev.evaluatorName}</span>
+                      <ScoreBadge score={ev.score} />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(ev.createdAt).toLocaleDateString("nb-NO")}
+                    </div>
+                    {ev.comment && (
+                      <p className="text-sm text-muted-foreground mt-1">{ev.comment}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

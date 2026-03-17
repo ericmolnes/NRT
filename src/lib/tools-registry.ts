@@ -1,4 +1,4 @@
-import { ClipboardCheck, Users, UserSearch, FileText, Calculator, Link2, Building, FolderKanban, Receipt, CalendarRange, Briefcase, RefreshCw, ShieldCheck, Truck, FileCheck, type LucideIcon } from "lucide-react";
+import { ClipboardCheck, Users, UserSearch, HardHat, FileText, Calculator, Link2, Building, FolderKanban, Receipt, CalendarRange, Briefcase, RefreshCw, ShieldCheck, Truck, FileCheck, type LucideIcon } from "lucide-react";
 
 export interface ToolDefinition {
   id: string;
@@ -41,6 +41,14 @@ export const tools: ToolDefinition[] = [
     description: "Kandidatoversikt fra RecMan — ikke-ansatte i kandidatpool",
     url: "/personell/kandidater",
     icon: UserSearch,
+    category: "personell",
+  },
+  {
+    id: "contractors",
+    name: "Innleide",
+    description: "Innleid personell med historikk, import og kompetanse",
+    url: "/personell/innleide",
+    icon: HardHat,
     category: "personell",
   },
   {

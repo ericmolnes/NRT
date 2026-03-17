@@ -27,11 +27,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Search, ChevronLeft, ChevronRight, Star, Plus, Briefcase, UserMinus, HardHat } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Star, Plus, Briefcase, UserMinus, Clock } from "lucide-react";
 import { SKILL_CATEGORIES, HIGHLIGHT_SKILL_KEYWORDS } from "@/lib/recman/types";
 import { CandidateDetail } from "@/components/recman/candidate-detail";
 import { getCandidateDetail } from "@/app/(authenticated)/recman/actions";
-import { toggleContractor, removeEmployment } from "@/app/(authenticated)/personell/kandidater/actions";
+import { removeEmployment } from "@/app/(authenticated)/personell/kandidater/actions";
 import { CreateCandidateForm } from "./create-candidate-form";
 
 type Candidate = {
@@ -51,6 +51,7 @@ type Candidate = {
   skills: unknown;
   languages: unknown;
   driversLicense: unknown;
+  contractorPeriods?: Array<{ id: string; startDate: Date; endDate: Date | null }>;
 };
 
 type Filters = {
@@ -125,19 +126,6 @@ export function CandidateListView({
         const detail = await getCandidateDetail(selectedCandidate.id);
         setSelectedCandidate(detail);
       });
-    }
-  }
-
-  async function handleToggleContractor(candidateId: string) {
-    setPendingAction(candidateId + "-contractor");
-    try {
-      const result = await toggleContractor(candidateId);
-      if (!result.success) console.error("[NRT] toggle contractor failed:", result.error);
-    } catch (e) {
-      console.error("[NRT] toggle contractor error:", e);
-    } finally {
-      setPendingAction(null);
-      router.refresh();
     }
   }
 
@@ -305,10 +293,10 @@ export function CandidateListView({
                           </Badge>
                         ) : c.isEmployee && c.employeeEnd ? (
                           <Badge variant="destructive" className="text-xs">Sluttet</Badge>
-                        ) : c.isContractor ? (
-                          <Badge className="text-xs bg-blue-600">
-                            <HardHat className="h-3 w-3 mr-1" />
-                            Innleid
+                        ) : c.contractorPeriods && c.contractorPeriods.length > 0 ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <Clock className="h-3 w-3 mr-1" />
+                            Tidligere innleid
                           </Badge>
                         ) : (
                           <Badge variant="outline" className="text-xs">Kandidat</Badge>
@@ -343,26 +331,6 @@ export function CandidateListView({
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          {/* Toggle innleid */}
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Button
-                                  variant={c.isContractor ? "default" : "outline"}
-                                  size="icon"
-                                  className={`h-7 w-7 ${c.isContractor ? "bg-blue-600 hover:bg-blue-700" : ""}`}
-                                  onClick={() => handleToggleContractor(c.id)}
-                                  disabled={!!pendingAction}
-                                />
-                              }
-                            >
-                              <HardHat className="h-3.5 w-3.5" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {c.isContractor ? "Fjern innleid-status" : "Merk som innleid"}
-                            </TooltipContent>
-                          </Tooltip>
-
                           {/* Fjern ansettelse (kun for aktive ansatte) */}
                           {c.isEmployee && !c.employeeEnd && (
                             <Tooltip>

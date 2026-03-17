@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { isAdmin } from "@/lib/rbac";
 import { db } from "@/lib/db";
+import { getAiModel } from "@/lib/ai/get-ai-model";
 import {
   Card,
   CardContent,
@@ -10,6 +11,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { SyncButton } from "@/components/poweroffice/sync-button";
 import { SyncButton as RecmanSyncButton } from "@/components/recman/sync-button";
+import { AiModelSetting } from "@/components/settings/ai-model-setting";
+import { saveAiModel } from "./actions";
 import {
   User,
   Shield,
@@ -21,6 +24,7 @@ import {
   Briefcase,
   Cloud,
   RefreshCw,
+  Bot,
 } from "lucide-react";
 
 export default async function SettingsPage() {
@@ -67,6 +71,9 @@ export default async function SettingsPage() {
         })
       )
     : null;
+
+  // Current AI model
+  const currentAiModel = admin ? await getAiModel() : null;
 
   // Latest sync logs
   const syncLogs = admin
@@ -258,6 +265,34 @@ export default async function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+        </section>
+      )}
+
+      {/* ─── Admin: AI-modell ─── */}
+      {admin && currentAiModel && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Bot className="h-4 w-4 text-purple-600" />
+            <h2
+              className="text-sm font-semibold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              AI-modell
+            </h2>
+          </div>
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-xs font-semibold">
+                Modell for kandidat-matching
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 pt-0">
+              <p className="text-xs text-muted-foreground mb-3">
+                Velg hvilken Claude-modell som brukes til AI-matching ved import av kandidater.
+              </p>
+              <AiModelSetting currentModel={currentAiModel} onSave={saveAiModel} />
+            </CardContent>
+          </Card>
         </section>
       )}
 

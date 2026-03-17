@@ -18,6 +18,7 @@ import { DEFAULT_CRITERIA, type Criterion } from "@/lib/validations/evaluation";
 interface Personnel {
   id: string;
   name: string;
+  role: string;
   recmanCandidate: { corporationId: string | null } | null;
 }
 
@@ -242,6 +243,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
   const [formType, setFormType] = useState("EVALUATION");
   const [authMode, setAuthMode] = useState("NONE");
   const [deptFilter, setDeptFilter] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
   const [criteria, setCriteria] = useState<Criterion[]>(DEFAULT_CRITERIA);
   const [activeTemplateId, setActiveTemplateId] = useState<string>("default");
   const [selectedPersonnel, setSelectedPersonnel] = useState<string[]>([]);
@@ -253,9 +255,15 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
   const [, startTransition] = useTransition();
 
   const filteredPersonnel = useMemo(() => {
-    if (!deptFilter) return personnel;
-    return personnel.filter((p) => p.recmanCandidate?.corporationId === deptFilter);
-  }, [personnel, deptFilter]);
+    let result = personnel;
+    if (deptFilter) {
+      result = result.filter((p) => p.recmanCandidate?.corporationId === deptFilter);
+    }
+    if (roleFilter) {
+      result = result.filter((p) => p.role === roleFilter);
+    }
+    return result;
+  }, [personnel, deptFilter, roleFilter]);
 
   return (
     <div className="rounded-xl border border-[oklch(0.90_0.012_250)] bg-card shadow-sm overflow-hidden">
@@ -493,7 +501,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
         {/* ─── Section 4: Distribution ─── */}
         <div className="px-5 py-5 sm:px-6 space-y-4">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Distribusjon</Label>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {departments.length > 0 && (
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Avdeling</label>
@@ -509,6 +517,18 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                 </select>
               </div>
             )}
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Rolle</label>
+              <select
+                className="flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+              >
+                <option value="">Alle roller</option>
+                <option value="Ansatt">Ansatte</option>
+                <option value="Innleid">Innleide</option>
+              </select>
+            </div>
             <div className="space-y-1 sm:col-span-2">
               <label className="text-xs text-muted-foreground">
                 Begrens til personell {selectedPersonnel.length > 0 && (

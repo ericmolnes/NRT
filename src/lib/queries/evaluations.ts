@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 interface EvaluationFilters {
   search?: string;
   rig?: string;
+  role?: string;
 }
 
 export async function getEvaluations(filters?: EvaluationFilters) {
@@ -19,6 +20,13 @@ export async function getEvaluations(filters?: EvaluationFilters) {
     where.personnel = {
       ...(where.personnel as Prisma.PersonnelWhereInput),
       rig: filters.rig,
+    };
+  }
+
+  if (filters?.role) {
+    where.personnel = {
+      ...(where.personnel as Prisma.PersonnelWhereInput),
+      role: filters.role,
     };
   }
 
@@ -58,6 +66,7 @@ export async function getAllPersonnel() {
     select: {
       id: true,
       name: true,
+      role: true,
       recmanCandidate: { select: { corporationId: true } },
     },
     where: { status: "ACTIVE" },

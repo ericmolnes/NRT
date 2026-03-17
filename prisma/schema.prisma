@@ -7,6 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── App-innstillinger (nøkkelverdi) ──────────────────────────────
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model Personnel {
   id                  String              @id @default(cuid())
   name                String
@@ -953,9 +961,13 @@ model RecmanCandidate {
   personnelId     String?   @unique
   personnel       Personnel? @relation(fields: [personnelId], references: [id])
 
+  // Innleid-perioder (historikk)
+  contractorPeriods ContractorPeriod[]
+
   @@index([email])
   @@index([lastName])
   @@index([isEmployee])
+  @@index([isContractor])
   @@index([title])
   @@index([lastSyncedAt])
 }
@@ -975,6 +987,51 @@ model RecmanSyncLog {
 
   @@index([status])
   @@index([startedAt])
+}
+
+// ─── Innleid-perioder (historikk) ─────────────────────────────────
+
+model ContractorPeriod {
+  id                String          @id @default(cuid())
+  recmanCandidateId String
+  recmanCandidate   RecmanCandidate @relation(fields: [recmanCandidateId], references: [id], onDelete: Cascade)
+  startDate         DateTime        @default(now())
+  endDate           DateTime?
+  company           String?                          // Bedriften den innleide er leid inn til
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([recmanCandidateId])
+}
+
+// ─── Kandidat-importbatch ─────────────────────────────────────────
+
+model CandidateImportBatch {
+  id            String            @id @default(cuid())
+  status        ImportBatchStatus @default(PENDING)
+  fileName      String
+  totalRows     Int               @default(0)
+  matchedRows   Int               @default(0)
+  createdRows   Int               @default(0)
+  failedRows    Int               @default(0)
+  matchResults  Json?
+  errorLog      String?
+  createdById   String
+  createdAt     DateTime          @default(now())
+  completedAt   DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum ImportBatchStatus {
+  PENDING
+  MATCHING
+  REVIEW
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 // ─── ISO 9001: Leverandørkontroll ─────────────────────────────────

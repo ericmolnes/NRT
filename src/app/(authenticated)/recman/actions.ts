@@ -69,7 +69,7 @@ export async function searchCandidates(params: SearchParams) {
   } else if (params.filter === "active") {
     AND.push({ isEmployee: true, employeeEnd: null });
   } else if (params.filter === "candidates") {
-    AND.push({ isEmployee: false });
+    AND.push({ isEmployee: false, isContractor: false });
   }
 
   // Skill-søk (søker i JSON skills-array)
@@ -107,6 +107,12 @@ export async function searchCandidates(params: SearchParams) {
   const [candidates, total] = await Promise.all([
     db.recmanCandidate.findMany({
       where,
+      include: {
+        contractorPeriods: {
+          orderBy: { startDate: "desc" },
+          take: 1,
+        },
+      },
       orderBy: [{ isEmployee: "desc" }, { lastName: "asc" }],
       take: pageSize,
       skip,
@@ -160,7 +166,14 @@ export async function searchCandidates(params: SearchParams) {
 export async function getCandidateDetail(id: string) {
   return db.recmanCandidate.findUnique({
     where: { id },
-    include: { personnel: true },
+    include: {
+      personnel: {
+        include: {
+          evaluations: { orderBy: { createdAt: "desc" } },
+        },
+      },
+      contractorPeriods: { orderBy: { startDate: "desc" } },
+    },
   });
 }
 

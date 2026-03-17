@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 interface PageProps {
-  searchParams: Promise<{ search?: string; rig?: string }>;
+  searchParams: Promise<{ search?: string; rig?: string; role?: string }>;
 }
 
 export default async function EvaluationPage({ searchParams }: PageProps) {
@@ -32,6 +32,7 @@ export default async function EvaluationPage({ searchParams }: PageProps) {
     getEvaluations({
       search: params.search,
       rig: params.rig,
+      role: params.role,
     }),
     getDistinctRigs(),
   ]);

@@ -33,6 +33,15 @@ export function EvaluationFilters({ rigs }: EvaluationFiltersProps) {
         onChange={(e) => updateParam("search", e.target.value)}
         className="max-w-sm"
       />
+      <select
+        className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+        defaultValue={searchParams.get("role") ?? ""}
+        onChange={(e) => updateParam("role", e.target.value)}
+      >
+        <option value="">Alle roller</option>
+        <option value="Ansatt">Ansatte</option>
+        <option value="Innleid">Innleide</option>
+      </select>
       {rigs.length > 0 && (
         <select
           className="h-9 rounded-md border border-border bg-background px-3 text-sm"
