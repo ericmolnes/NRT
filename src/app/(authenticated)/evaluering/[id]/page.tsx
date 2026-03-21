@@ -76,15 +76,6 @@ export default async function EvaluationDetailPage({ params }: PageProps) {
                 <p className="font-medium">{evaluation.personnel.role}</p>
               </div>
             </div>
-            {evaluation.personnel.rig && (
-              <div className="flex items-center gap-3">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Rigg</p>
-                  <p className="font-medium">{evaluation.personnel.rig}</p>
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
 

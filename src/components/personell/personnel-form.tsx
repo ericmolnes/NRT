@@ -78,10 +78,6 @@ export function PersonnelForm() {
                 placeholder="F.eks. Drift"
               />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor="rig">Rigg</Label>
-              <Input id="rig" name="rig" placeholder="F.eks. Rig 1" />
-            </div>
           </div>
 
           {state.message && (

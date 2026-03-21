@@ -7,7 +7,6 @@ interface PersonnelWithEvals {
   name: string;
   role: string;
   department: string | null;
-  rig: string | null;
   status: string;
   evaluations: { score: number }[];
   poEmployee: {

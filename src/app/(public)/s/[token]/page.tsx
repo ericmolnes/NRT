@@ -81,9 +81,9 @@ export default async function PublicFormPage({ params }: PageProps) {
   const formContent = (
     <div className="w-full max-w-xl space-y-6 px-4">
       <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[oklch(0.68_0.155_220_/_20%)] bg-[oklch(0.68_0.155_220_/_8%)] px-3.5 py-1">
-          <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.68_0.155_220)]" />
-          <span className="text-xs font-medium text-[oklch(0.40_0.10_220)]">Evaluering</span>
+        <div className="inline-flex items-center gap-2 rounded-full border border-[oklch(0.89_0.17_178_/_20%)] bg-[oklch(0.89_0.17_178_/_8%)] px-3.5 py-1">
+          <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.89_0.17_178)]" />
+          <span className="text-xs font-medium text-[oklch(0.40_0.10_178)]">Evaluering</span>
         </div>
         <h1 className="font-display text-2xl font-bold tracking-tight text-[oklch(0.18_0.035_250)]">
           {link.title}

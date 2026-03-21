@@ -63,7 +63,6 @@ export async function updatePersonnel(
     email: getFormStringOptional(formData, "email"),
     phone: getFormStringOptional(formData, "phone"),
     department: getFormStringOptional(formData, "department"),
-    rig: getFormStringOptional(formData, "rig"),
   };
 
   const parsed = updatePersonnelSchema.safeParse(raw);

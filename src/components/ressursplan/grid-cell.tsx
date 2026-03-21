@@ -45,8 +45,8 @@ export const GridCell = memo(function GridCell({
       className={cn(
         "h-8 min-w-[32px] border-r border-b border-gray-200/80 text-[9px] leading-8 text-center select-none cursor-pointer transition-none overflow-hidden relative",
         isWeekend && !labelDef && "bg-gray-50",
-        isToday && "ring-1 ring-inset ring-[oklch(0.68_0.155_220)]",
-        isSelected && "ring-2 ring-inset ring-[oklch(0.68_0.155_220)] z-10"
+        isToday && "ring-1 ring-inset ring-[oklch(0.89_0.17_178)]",
+        isSelected && "ring-2 ring-inset ring-[oklch(0.89_0.17_178)] z-10"
       )}
       style={
         labelDef

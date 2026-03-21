@@ -6,7 +6,6 @@ export const createPersonnelFullSchema = z.object({
   email: z.string().email("Ugyldig e-postadresse").optional().or(z.literal("")),
   phone: z.string().optional(),
   department: z.string().optional(),
-  rig: z.string().optional(),
 });
 
 export const updatePersonnelSchema = createPersonnelFullSchema.partial().extend({

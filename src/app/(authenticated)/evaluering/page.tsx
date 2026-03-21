@@ -2,15 +2,8 @@ import { Suspense } from "react";
 import {
   getEvaluations,
   getEvaluationStats,
-  getDistinctRigs,
 } from "@/lib/queries/evaluations";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EvaluationsTable } from "@/components/evaluering/evaluations-table";
 import { EvaluationFilters } from "@/components/evaluering/evaluation-filters";
@@ -22,105 +15,113 @@ import {
 } from "lucide-react";
 
 interface PageProps {
-  searchParams: Promise<{ search?: string; rig?: string; role?: string }>;
+  searchParams: Promise<{
+    search?: string;
+    role?: string;
+    score?: string;
+  }>;
 }
 
 export default async function EvaluationPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const [stats, evaluations, rigs] = await Promise.all([
+  const [stats, evaluations] = await Promise.all([
     getEvaluationStats(),
     getEvaluations({
       search: params.search,
-      rig: params.rig,
       role: params.role,
+      scoreRange: (params.score as "high" | "mid" | "low") || undefined,
     }),
-    getDistinctRigs(),
   ]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Evalueringer
-          </h1>
-          <p className="text-muted-foreground">
-            Oversikt over alle personellevalueringer.
-          </p>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight font-display">
+          Evalueringer
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Oversikt over alle personellevalueringer.
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Totalt personell
-            </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalPersonnel}</div>
-            <p className="text-xs text-muted-foreground">
-              Registrerte ansatte
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Evalueringer
-            </CardTitle>
-            <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalEvaluations}</div>
-            <p className="text-xs text-muted-foreground">
-              Gjennomførte evalueringer
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Gjennomsnittsscore
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.averageScore !== null
-                ? stats.averageScore.toFixed(1)
-                : "-"}
+      {/* Stat cards */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 stagger-in">
+        <Card className="card-hover">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
+              <Users className="h-5 w-5 text-nrt-teal" />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Snitt alle evalueringer
-            </p>
+            <div>
+              <p className="text-2xl font-bold tabular-nums leading-none">
+                {stats.totalPersonnel}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Personell
+              </p>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Siste evaluering
-            </CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {stats.latestEvaluationDate
-                ? stats.latestEvaluationDate.toLocaleDateString("nb-NO")
-                : "-"}
+
+        <Card className="card-hover">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
+              <ClipboardCheck className="h-5 w-5 text-nrt-teal" />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {stats.latestEvaluationDate ? "Dato" : "Ingen evalueringer ennå"}
-            </p>
+            <div>
+              <p className="text-2xl font-bold tabular-nums leading-none">
+                {stats.totalEvaluations}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Evalueringer
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
+              <TrendingUp className="h-5 w-5 text-nrt-teal" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tabular-nums leading-none">
+                {stats.averageScore !== null
+                  ? stats.averageScore.toFixed(1)
+                  : "–"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Snittsscore
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="card-hover">
+          <CardContent className="flex items-center gap-4 p-4">
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary">
+              <Calendar className="h-5 w-5 text-nrt-teal" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold tabular-nums leading-none">
+                {stats.latestEvaluationDate
+                  ? stats.latestEvaluationDate.toLocaleDateString("nb-NO")
+                  : "–"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Siste evaluering
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Filters */}
       <Suspense fallback={<Skeleton className="h-10 w-full max-w-sm" />}>
-        <EvaluationFilters rigs={rigs} />
+        <EvaluationFilters />
       </Suspense>
 
+      {/* Table */}
       <EvaluationsTable evaluations={evaluations} />
     </div>
   );

@@ -525,14 +525,6 @@ export default async function PersonnelDetailPage({
                     </span>
                   </div>
                 )}
-                {personnel.rig && (
-                  <div className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-white/40" />
-                    <span className="text-xs text-white/70">
-                      {personnel.rig}
-                    </span>
-                  </div>
-                )}
                 {rc?.nationality && (
                   <div className="flex items-center gap-1.5">
                     <Flag className="h-3.5 w-3.5 text-white/40" />
@@ -815,7 +807,7 @@ export default async function PersonnelDetailPage({
               <SectionTitle
                 icon={ClipboardList}
                 title="Egendefinerte felter"
-                iconColor="text-nrt-steel"
+                iconColor="text-muted-foreground"
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {categories
@@ -1179,16 +1171,13 @@ export default async function PersonnelDetailPage({
                         {personnel.department}
                       </DataRow>
                     )}
-                    {personnel.rig && (
-                      <DataRow label="Rigg">{personnel.rig}</DataRow>
-                    )}
                   </div>
                 </CardContent>
               </Card>
             </Section>
           )}
 
-          {/* Evalueringer (compact) */}
+          {/* Evalueringer — snitt-sammendrag med link */}
           {personnel.evaluations.length > 0 && (
             <Section>
               <SectionTitle
@@ -1198,59 +1187,34 @@ export default async function PersonnelDetailPage({
                 iconColor="text-amber-500"
               />
               <Card>
-                <CardContent className="p-0">
-                  <div className="divide-y">
-                    {personnel.evaluations.slice(0, 5).map((evaluation) => (
-                      <div key={evaluation.id} className="px-4 py-2.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <ScoreBadge score={evaluation.score} />
-                            <span className="text-[10px] text-muted-foreground">
-                              av {evaluation.evaluatorName}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                              {evaluation.createdAt.toLocaleDateString("nb-NO")}
-                            </span>
-                            <DeleteButton action={deleteEvaluation.bind(null, evaluation.id)} />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1 mt-1.5">
-                          {EVALUATION_CRITERIA.map((criterion) => {
-                            const value = evaluation[
-                              criterion.key as keyof typeof evaluation
-                            ] as number;
-                            return (
-                              <div
-                                key={criterion.key}
-                                className="flex items-center justify-between rounded bg-muted/50 px-1.5 py-0.5"
-                              >
-                                <span className="text-[9px] text-muted-foreground truncate mr-1">
-                                  {criterion.label}
-                                </span>
-                                <span className="text-[10px] font-medium">
-                                  {value}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {evaluation.comment && (
-                          <p className="text-[10px] mt-1.5 text-muted-foreground line-clamp-2">
-                            {evaluation.comment}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {personnel.evaluations.length > 5 && (
-                    <div className="px-4 py-2 border-t text-center">
-                      <span className="text-[10px] text-muted-foreground">
-                        +{personnel.evaluations.length - 5} flere evalueringer
+                <CardContent className="px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-2xl font-bold tabular-nums ${
+                        Number(avgScore) >= 8 ? "text-emerald-600" :
+                        Number(avgScore) >= 5 ? "text-amber-600" : "text-red-600"
+                      }`}>
+                        {avgScore}
                       </span>
+                      <span className="text-sm text-muted-foreground">/10 snitt</span>
                     </div>
-                  )}
+                    <Link
+                      href="#evalueringer"
+                      className="text-xs text-nrt-teal hover:underline"
+                    >
+                      Se alle →
+                    </Link>
+                  </div>
+                  {/* Mini bar */}
+                  <div className="w-full h-1.5 rounded-full bg-muted mt-2">
+                    <div
+                      className={`h-1.5 rounded-full ${
+                        Number(avgScore) >= 8 ? "bg-emerald-500" :
+                        Number(avgScore) >= 5 ? "bg-amber-500" : "bg-red-500"
+                      }`}
+                      style={{ width: `${Number(avgScore) * 10}%` }}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </Section>
@@ -1305,15 +1269,127 @@ export default async function PersonnelDetailPage({
           3. FULL-WIDTH BOTTOM SECTIONS
           ═══════════════════════════════════════════════ */}
 
-      {/* Jobber & Ressursplan */}
+      {/* Evalueringer — full tabell (collapsible) */}
+      {personnel.evaluations.length > 0 && (
+        <Section>
+          <div id="evalueringer" className="scroll-mt-6" />
+          <details className="group" open>
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-amber-500">
+                  <Star className="h-3.5 w-3.5" />
+                </div>
+                <h2 className="font-display text-sm font-semibold tracking-tight">
+                  Alle evalueringer
+                </h2>
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                  {personnel.evaluations.length}
+                </Badge>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform ml-auto" />
+              </div>
+            </summary>
+          <Card>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Dato</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Evaluert av</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground">Score</th>
+                      {EVALUATION_CRITERIA.map((c) => (
+                        <th key={c.key} className="px-3 py-2.5 text-left text-[10px] font-medium text-muted-foreground hidden lg:table-cell">
+                          {c.label}
+                        </th>
+                      ))}
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-muted-foreground hidden sm:table-cell">Kommentar</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-muted-foreground" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {personnel.evaluations.map((evaluation) => {
+                      const customScores = (evaluation as unknown as Record<string, unknown>).criteriaScores as Record<string, number> | null;
+                      const hasCustom = customScores && Object.keys(customScores).length > 0;
+                      return (
+                        <tr key={evaluation.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
+                            {evaluation.createdAt.toLocaleDateString("nb-NO")}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs">
+                            {evaluation.evaluatorName}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <ScoreBadge score={evaluation.score} />
+                          </td>
+                          {EVALUATION_CRITERIA.map((criterion) => {
+                            const value = hasCustom
+                              ? (customScores[criterion.label] ?? null)
+                              : (evaluation[criterion.key as keyof typeof evaluation] as number);
+                            return (
+                              <td key={criterion.key} className="px-3 py-2.5 hidden lg:table-cell">
+                                {value !== null && value !== undefined ? (
+                                  <span className={`text-xs font-medium tabular-nums ${
+                                    value >= 8 ? "text-emerald-600" :
+                                    value >= 5 ? "text-amber-600" : "text-red-600"
+                                  }`}>
+                                    {value}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">–</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-4 py-2.5 hidden sm:table-cell max-w-[200px]">
+                            {evaluation.comment ? (
+                              <p className="text-[10px] text-muted-foreground line-clamp-2">
+                                {evaluation.comment}
+                              </p>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">–</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Link
+                                href={`/evaluering/${evaluation.id}`}
+                                className="text-[10px] text-nrt-teal hover:underline"
+                              >
+                                Detaljer
+                              </Link>
+                              <DeleteButton action={deleteEvaluation.bind(null, evaluation.id)} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+          </details>
+        </Section>
+      )}
+
+      {/* Jobber & Ressursplan (collapsible) */}
       {(activeAssignments.length > 0 || jobsData.entries.length > 0) && (
         <Section>
-          <SectionTitle
-            icon={Briefcase}
-            title="Jobber & Ressursplan"
-            count={activeAssignments.length}
-            iconColor="text-emerald-600"
-          />
+          <details className="group" open>
+            <summary className="cursor-pointer list-none">
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-muted text-emerald-600">
+                  <Briefcase className="h-3.5 w-3.5" />
+                </div>
+                <h2 className="font-display text-sm font-semibold tracking-tight">
+                  Jobber & Ressursplan
+                </h2>
+                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                  {activeAssignments.length}
+                </Badge>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground group-open:rotate-180 transition-transform ml-auto" />
+              </div>
+            </summary>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* Aktive jobber */}
             {activeAssignments.length > 0 && (
@@ -1428,6 +1504,7 @@ export default async function PersonnelDetailPage({
               </Card>
             )}
           </div>
+          </details>
         </Section>
       )}
 

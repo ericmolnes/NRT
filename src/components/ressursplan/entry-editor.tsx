@@ -69,7 +69,7 @@ export function EntryEditor({ entry, onClose, onRefresh }: EntryEditorProps) {
               {entry.personnel && (
                 <Link
                   href={`/personell/${entry.personnel.id}`}
-                  className="text-[10px] text-[oklch(0.68_0.155_220)] hover:underline inline-flex items-center gap-0.5"
+                  className="text-[10px] text-[oklch(0.89_0.17_178)] hover:underline inline-flex items-center gap-0.5"
                 >
                   G\u00e5 til profil
                   <ExternalLink className="h-2 w-2" />

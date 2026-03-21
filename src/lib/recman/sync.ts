@@ -1,6 +1,11 @@
 import { db } from "@/lib/db";
+import type { Prisma } from "@/generated/prisma/client";
 import { getAllCandidates } from "./client";
-import { CANDIDATE_ALL_FIELDS, type RecmanCandidate } from "./types";
+import {
+  CANDIDATE_ALL_FIELDS,
+  type RecmanCandidate,
+  type RecmanCertification,
+} from "./types";
 import {
   findOrCreatePersonnel,
   enrichPersonnel,
@@ -96,6 +101,33 @@ export async function syncAllCandidates(triggeredBy: string) {
   }
 }
 
+/** Map Recman v2 `certification[]` to the internal course format stored in DB. */
+function mapCertifications(
+  certs: RecmanCertification[] | RecmanCandidate["course"]
+): Prisma.InputJsonValue[] {
+  if (!Array.isArray(certs) || certs.length === 0) return [];
+
+  return certs.map((cert) => {
+    // Already in old `course` format (has courseId)
+    if ("courseId" in cert) return cert as unknown as Prisma.InputJsonValue;
+
+    // New `certification` format from Recman v2
+    const c = cert as RecmanCertification;
+    return {
+      courseId: c.certificationId,
+      name: c.name,
+      expiryDate: c.endDate || undefined,
+      description: c.description || undefined,
+      verified: false,
+      files: (c.files ?? []).map((f) => ({
+        fileId: String(f.candidateFileId || f.certificationFileId),
+        fileName: f.name,
+        url: "", // Recman v2 does not return file URLs in certification scope
+      })),
+    };
+  });
+}
+
 async function upsertCandidate(c: RecmanCandidate) {
   const hasEmployee = !!c.employee?.startDate;
   const isActive = hasEmployee && !c.employee?.endDate;
@@ -134,13 +166,18 @@ async function upsertCandidate(c: RecmanCandidate) {
     education: c.education ?? [],
     experience: c.experience ?? [],
     projectExperience: c.projectExperience ?? [],
-    courses: c.course ?? [],
+    courses: mapCertifications(c.certification ?? c.course ?? []),
     relatives: c.relative ?? [],
     attributes: c.attributes ?? [],
     languages: c.language ?? [],
     driversLicense: c.driversLicense ?? [],
     references: c.reference ?? [],
-    files: c.files ?? [],
+    files: (c.files ?? []).map((f) => ({
+      fileId: f.fileId,
+      fileName: (f as Record<string, unknown>).name as string || f.fileName || "Dokument",
+      url: f.url || "",
+      category: f.category,
+    })),
     recmanCreated: c.created ? new Date(c.created) : null,
     recmanUpdated: c.updated ? new Date(c.updated) : null,
     lastSyncedAt: new Date(),

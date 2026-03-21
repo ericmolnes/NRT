@@ -38,7 +38,7 @@ export function ScoreSelector({ name, defaultValue, onScoreChange }: ScoreSelect
                     : "bg-red-500 text-white shadow-sm shadow-red-500/30 scale-105"
                 : selected !== null && selected !== num
                   ? "bg-[oklch(0.94_0.01_250)] text-[oklch(0.50_0.02_250)] hover:bg-[oklch(0.90_0.015_250)]"
-                  : "bg-white border border-[oklch(0.88_0.015_250)] text-[oklch(0.35_0.03_250)] hover:border-[oklch(0.68_0.155_220)] hover:bg-[oklch(0.68_0.155_220_/_5%)]"
+                  : "bg-white border border-[oklch(0.88_0.015_250)] text-[oklch(0.35_0.03_250)] hover:border-[oklch(0.89_0.17_178)] hover:bg-[oklch(0.89_0.17_178_/_5%)]"
             )}
           >
             {num}

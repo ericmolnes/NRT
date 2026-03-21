@@ -25,7 +25,6 @@ export async function createPersonnel(
     email: getFormStringOptional(formData, "email"),
     phone: getFormStringOptional(formData, "phone"),
     department: getFormStringOptional(formData, "department"),
-    rig: getFormStringOptional(formData, "rig"),
   };
 
   const parsed = createPersonnelFullSchema.safeParse(raw);

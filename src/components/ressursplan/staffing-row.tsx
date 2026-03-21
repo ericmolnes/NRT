@@ -172,7 +172,7 @@ export const PersonRow = memo(function PersonRow({
             key={date}
             className={cn(
               "h-6 border-b border-r border-gray-100 shrink-0",
-              isToday && "ring-1 ring-inset ring-[oklch(0.68_0.155_220)]"
+              isToday && "ring-1 ring-inset ring-[oklch(0.89_0.17_178)]"
             )}
             style={{
               width: CELL_W,

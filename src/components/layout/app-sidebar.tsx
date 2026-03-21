@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { NavUser } from "@/components/layout/nav-user";
+import { NrtLogo } from "@/components/brand/nrt-logo";
 import { LayoutDashboard, Settings } from "lucide-react";
 import { categories, getToolsByCategory } from "@/lib/tools-registry";
 import Link from "next/link";
@@ -34,31 +35,17 @@ export function AppSidebar({ user }: AppSidebarProps) {
     <Sidebar>
       <SidebarHeader>
         <div className="flex items-center gap-3 px-4 py-3">
-          {/* Logo mark */}
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary/90 shadow-sm shadow-sidebar-primary/20">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="h-4 w-4 text-sidebar-primary-foreground"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
+          {/* NRT Logo mark */}
+          <div className="relative flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary/15">
+            <NrtLogo size={20} className="text-sidebar-primary" />
+            <div className="pointer-events-none absolute inset-0 rounded-lg" style={{ boxShadow: "0 0 12px oklch(0.89 0.17 178 / 20%)" }} />
           </div>
           <div className="flex flex-col">
             <span
               className="text-sm font-bold tracking-tight text-sidebar-foreground"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              NRT Tools
-            </span>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-sidebar-foreground/40">
-              Nordic Rig Tech
+              Nordic RigTech
             </span>
           </div>
         </div>
