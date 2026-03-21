@@ -9,7 +9,6 @@ const scoreField = z.coerce
 export const createPersonnelSchema = z.object({
   name: z.string().min(2, "Navn må ha minst 2 tegn"),
   role: z.string().min(2, "Rolle må ha minst 2 tegn"),
-  rig: z.string().optional(),
 });
 
 export const createEvaluationSchema = z.object({

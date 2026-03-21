@@ -60,6 +60,22 @@ export type RecmanCourse = {
   }>;
 };
 
+/** Certification as returned by the Recman v2 API (replaces the old `course` field). */
+export type RecmanCertification = {
+  certificationId: string;
+  name: string;
+  endDate: string;
+  description: string;
+  candidateAccess: number;
+  files: Array<{
+    certificationFileId: number;
+    name: string;
+    ext: string;
+    size: number;
+    candidateFileId: number;
+  }>;
+};
+
 export type RecmanProjectExperience = {
   projectExperienceId: string;
   title: string;
@@ -148,6 +164,7 @@ export type RecmanCandidate = {
   education?: RecmanEducation[];
   experience?: RecmanExperience[];
   course?: RecmanCourse[];
+  certification?: RecmanCertification[];
   projectExperience?: RecmanProjectExperience[];
   relative?: RecmanRelative[];
   attributes?: RecmanAttribute[];
@@ -160,6 +177,8 @@ export type RecmanCandidate = {
 export type RecmanFile = {
   fileId: string;
   fileName: string;
+  /** Recman v2 returns `name` instead of `fileName` */
+  name?: string;
   url: string;
   category?: string;
   description?: string;
@@ -214,7 +233,7 @@ export const JOB_FIELDS = "name,description,startDate,endDate,salary,created,upd
 // ─── All available GET fields ───────────────────────────────────────
 
 export const CANDIDATE_BASIC_FIELDS = "firstName,lastName,email,phone,mobilePhone,address,postalCode,postalPlace,city,country,nationality,gender,dob,title,description,created,updated,rating,image,linkedIn" as const;
-export const CANDIDATE_NESTED_FIELDS = "employee,skills,education,experience,course,projectExperience,relative,attributes,language,driversLicense,reference,files" as const;
+export const CANDIDATE_NESTED_FIELDS = "employee,skills,education,experience,certification,projectExperience,relative,attributes,language,driversLicense,reference,files" as const;
 export const CANDIDATE_ALL_FIELDS = `${CANDIDATE_BASIC_FIELDS},${CANDIDATE_NESTED_FIELDS}` as const;
 
 // ─── Filter/Search Types ────────────────────────────────────────────

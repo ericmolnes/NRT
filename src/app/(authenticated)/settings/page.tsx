@@ -300,7 +300,7 @@ export default async function SettingsPage() {
       {admin && stats && (
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <Database className="h-4 w-4 text-nrt-steel" />
+            <Database className="h-4 w-4 text-muted-foreground" />
             <h2
               className="text-sm font-semibold"
               style={{ fontFamily: "var(--font-display)" }}

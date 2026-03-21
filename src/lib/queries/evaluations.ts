@@ -3,8 +3,8 @@ import type { Prisma } from "@/generated/prisma/client";
 
 interface EvaluationFilters {
   search?: string;
-  rig?: string;
   role?: string;
+  scoreRange?: "high" | "mid" | "low";
 }
 
 export async function getEvaluations(filters?: EvaluationFilters) {
@@ -16,18 +16,21 @@ export async function getEvaluations(filters?: EvaluationFilters) {
     };
   }
 
-  if (filters?.rig) {
-    where.personnel = {
-      ...(where.personnel as Prisma.PersonnelWhereInput),
-      rig: filters.rig,
-    };
-  }
-
   if (filters?.role) {
     where.personnel = {
       ...(where.personnel as Prisma.PersonnelWhereInput),
       role: filters.role,
     };
+  }
+
+  if (filters?.scoreRange) {
+    if (filters.scoreRange === "high") {
+      where.score = { gte: 8 };
+    } else if (filters.scoreRange === "mid") {
+      where.score = { gte: 5, lt: 8 };
+    } else {
+      where.score = { lt: 5 };
+    }
   }
 
   return db.evaluation.findMany({
@@ -87,12 +90,104 @@ export async function getPersonnelForPublicForm(roleFilter?: string | null) {
   });
 }
 
-export async function getDistinctRigs() {
-  const results = await db.personnel.findMany({
-    where: { rig: { not: null } },
-    select: { rig: true },
-    distinct: ["rig"],
-    orderBy: { rig: "asc" },
-  });
-  return results.map((r) => r.rig).filter(Boolean) as string[];
+export interface GroupedEvaluation {
+  personnelId: string;
+  name: string;
+  role: string;
+  avgScore: number;
+  evaluationCount: number;
+  latestDate: Date;
+  latestEvaluator: string;
+  evaluations: {
+    id: string;
+    score: number;
+    comment: string | null;
+    evaluatorName: string;
+    createdAt: Date;
+    criteriaScores: Record<string, number> | null;
+    hpiSafety: number;
+    competence: number;
+    collaboration: number;
+    workEthic: number;
+    independence: number;
+    punctuality: number;
+  }[];
 }
+
+interface GroupedFilters {
+  search?: string;
+  role?: string;
+  scoreRange?: "high" | "mid" | "low";
+}
+
+export async function getGroupedEvaluations(
+  filters?: GroupedFilters
+): Promise<GroupedEvaluation[]> {
+  const where: Prisma.PersonnelWhereInput = { status: "ACTIVE" };
+
+  if (filters?.search) {
+    where.name = { contains: filters.search, mode: "insensitive" };
+  }
+  if (filters?.role) {
+    where.role = filters.role;
+  }
+
+  const personnel = await db.personnel.findMany({
+    where: {
+      ...where,
+      evaluations: { some: {} },
+    },
+    include: {
+      evaluations: {
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          score: true,
+          comment: true,
+          evaluatorName: true,
+          createdAt: true,
+          criteriaScores: true,
+          hpiSafety: true,
+          competence: true,
+          collaboration: true,
+          workEthic: true,
+          independence: true,
+          punctuality: true,
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  let results: GroupedEvaluation[] = personnel.map((p) => {
+    const avgScore =
+      p.evaluations.reduce((sum, e) => sum + e.score, 0) /
+      p.evaluations.length;
+    const latest = p.evaluations[0];
+    return {
+      personnelId: p.id,
+      name: p.name,
+      role: p.role,
+      avgScore: Math.round(avgScore * 10) / 10,
+      evaluationCount: p.evaluations.length,
+      latestDate: latest.createdAt,
+      latestEvaluator: latest.evaluatorName,
+      evaluations: p.evaluations.map((e) => ({
+        ...e,
+        criteriaScores: (e.criteriaScores as Record<string, number>) ?? null,
+      })),
+    };
+  });
+
+  if (filters?.scoreRange) {
+    results = results.filter((r) => {
+      if (filters.scoreRange === "high") return r.avgScore >= 8;
+      if (filters.scoreRange === "mid")
+        return r.avgScore >= 5 && r.avgScore < 8;
+      return r.avgScore < 5;
+    });
+  }
+
+  return results;
+}
+

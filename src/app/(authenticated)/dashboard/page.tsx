@@ -50,8 +50,8 @@ export default async function DashboardPage() {
           className="pointer-events-none absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage: `
-              linear-gradient(oklch(0.68 0.155 220 / 50%) 1px, transparent 1px),
-              linear-gradient(90deg, oklch(0.68 0.155 220 / 50%) 1px, transparent 1px)
+              linear-gradient(oklch(0.89 0.17 178 / 50%) 1px, transparent 1px),
+              linear-gradient(90deg, oklch(0.89 0.17 178 / 50%) 1px, transparent 1px)
             `,
             backgroundSize: "40px 40px",
           }}
@@ -60,11 +60,11 @@ export default async function DashboardPage() {
         <div
           className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full"
           style={{
-            background: "radial-gradient(circle, oklch(0.68 0.155 220 / 12%), transparent 70%)",
+            background: "radial-gradient(circle, oklch(0.89 0.17 178 / 12%), transparent 70%)",
           }}
         />
         <div className="relative">
-          <p className="text-sm font-medium text-[oklch(0.68_0.155_220)]">
+          <p className="text-sm font-medium text-[oklch(0.89_0.17_178)]">
             {greeting},
           </p>
           <h1
@@ -137,7 +137,7 @@ export default async function DashboardPage() {
                 href={tool.url}
                 className="group card-hover flex items-center gap-4 rounded-xl border bg-card p-4"
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors group-hover:bg-[oklch(0.68_0.155_220_/_10%)] group-hover:text-[oklch(0.68_0.155_220)]">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors group-hover:bg-[oklch(0.89_0.17_178_/_10%)] group-hover:text-[oklch(0.89_0.17_178)]">
                   <tool.icon className="h-5 w-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -160,9 +160,9 @@ export default async function DashboardPage() {
 
 const accentColors = {
   teal: {
-    iconBg: "bg-[oklch(0.68_0.155_220_/_10%)]",
-    iconText: "text-[oklch(0.68_0.155_220)]",
-    glow: "oklch(0.68 0.155 220 / 6%)",
+    iconBg: "bg-[oklch(0.89_0.17_178_/_10%)]",
+    iconText: "text-[oklch(0.89_0.17_178)]",
+    glow: "oklch(0.89 0.17 178 / 6%)",
   },
   blue: {
     iconBg: "bg-[oklch(0.58_0.18_240_/_10%)]",

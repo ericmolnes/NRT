@@ -64,10 +64,10 @@ function SubCriteriaList({
   }
 
   return (
-    <div className="ml-5 mt-2 space-y-1.5 border-l-2 border-[oklch(0.68_0.155_220_/_20%)] pl-3">
+    <div className="ml-5 mt-2 space-y-1.5 border-l-2 border-[oklch(0.89_0.17_178_/_20%)] pl-3">
       {items.map((sub, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.68_0.155_220_/_40%)] shrink-0" />
+          <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.89_0.17_178_/_40%)] shrink-0" />
           <Input
             value={sub.label}
             onChange={(e) => update(i, "label", e.target.value)}
@@ -88,7 +88,7 @@ function SubCriteriaList({
         onClick={() =>
           onChange([...items, { key: `sub_${items.length}`, label: "", description: "" }])
         }
-        className="flex items-center gap-1 text-[11px] text-[oklch(0.50_0.10_220)] hover:text-[oklch(0.40_0.14_220)] font-medium mt-1"
+        className="flex items-center gap-1 text-[11px] text-[oklch(0.45_0.14_178)] hover:text-[oklch(0.40_0.14_178)] font-medium mt-1"
       >
         <Plus className="h-3 w-3" />
         Legg til underpunkt
@@ -183,7 +183,7 @@ function CriteriaEditor({
 
                 {/* Sub-count badge */}
                 {hasChildren && !isExpanded && (
-                  <span className="text-[10px] text-[oklch(0.50_0.10_220)] bg-[oklch(0.68_0.155_220_/_10%)] px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                  <span className="text-[10px] text-[oklch(0.45_0.14_178)] bg-[oklch(0.89_0.17_178_/_10%)] px-1.5 py-0.5 rounded-full font-medium shrink-0">
                     {criterion.children!.length} under
                   </span>
                 )}
@@ -310,11 +310,11 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-all",
                       formType === type.value
-                        ? "border-[oklch(0.68_0.155_220)] bg-[oklch(0.68_0.155_220_/_5%)] ring-1 ring-[oklch(0.68_0.155_220_/_30%)]"
+                        ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_5%)] ring-1 ring-[oklch(0.89_0.17_178_/_30%)]"
                         : "border-border hover:border-muted-foreground/30"
                     )}
                   >
-                    <type.icon className={cn("h-4 w-4 shrink-0", formType === type.value ? "text-[oklch(0.50_0.14_220)]" : "text-muted-foreground")} />
+                    <type.icon className={cn("h-4 w-4 shrink-0", formType === type.value ? "text-[oklch(0.45_0.14_178)]" : "text-muted-foreground")} />
                     <div>
                       <div className="text-sm font-medium">{type.label}</div>
                       <div className="text-[10px] text-muted-foreground">{type.desc}</div>
@@ -362,7 +362,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                   className={cn(
                     "text-xs px-2.5 py-1 rounded-full border transition-colors",
                     activeTemplateId === "default"
-                      ? "border-[oklch(0.68_0.155_220)] bg-[oklch(0.68_0.155_220_/_8%)] text-[oklch(0.40_0.12_220)] font-medium"
+                      ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_8%)] text-[oklch(0.40_0.12_178)] font-medium"
                       : "border-border text-muted-foreground hover:border-muted-foreground/40"
                   )}
                 >
@@ -376,7 +376,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                       className={cn(
                         "text-xs px-2.5 py-1 rounded-l-full border transition-colors",
                         activeTemplateId === t.id
-                          ? "border-[oklch(0.68_0.155_220)] bg-[oklch(0.68_0.155_220_/_8%)] text-[oklch(0.40_0.12_220)] font-medium"
+                          ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_8%)] text-[oklch(0.40_0.12_178)] font-medium"
                           : "border-border text-muted-foreground hover:border-muted-foreground/40"
                       )}
                     >
@@ -462,11 +462,11 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                 className={cn(
                   "flex flex-col items-center gap-1 rounded-lg border p-2.5 text-center transition-all",
                   authMode === mode.value
-                    ? "border-[oklch(0.68_0.155_220)] bg-[oklch(0.68_0.155_220_/_5%)] ring-1 ring-[oklch(0.68_0.155_220_/_30%)]"
+                    ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_5%)] ring-1 ring-[oklch(0.89_0.17_178_/_30%)]"
                     : "border-border hover:border-muted-foreground/30"
                 )}
               >
-                <mode.icon className={cn("h-4 w-4", authMode === mode.value ? "text-[oklch(0.50_0.14_220)]" : "text-muted-foreground")} />
+                <mode.icon className={cn("h-4 w-4", authMode === mode.value ? "text-[oklch(0.45_0.14_178)]" : "text-muted-foreground")} />
                 <span className={cn("text-xs font-medium", authMode === mode.value ? "text-foreground" : "text-muted-foreground")}>{mode.label}</span>
                 <span className="text-[9px] leading-tight text-muted-foreground">{mode.description}</span>
               </button>
@@ -533,7 +533,7 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
             <div className="space-y-1 sm:col-span-2">
               <label className="text-xs text-muted-foreground">
                 Begrens til personell {selectedPersonnel.length > 0 && (
-                  <span className="text-[oklch(0.50_0.10_220)] font-medium">({selectedPersonnel.length} valgt)</span>
+                  <span className="text-[oklch(0.45_0.14_178)] font-medium">({selectedPersonnel.length} valgt)</span>
                 )}
               </label>
               <input type="hidden" name="personnelIds" value={JSON.stringify(selectedPersonnel)} />
@@ -547,13 +547,13 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
                       return (
                         <span
                           key={id}
-                          className="inline-flex items-center gap-1 rounded-full bg-[oklch(0.68_0.155_220_/_10%)] pl-2.5 pr-1 py-0.5 text-xs font-medium text-[oklch(0.35_0.08_220)]"
+                          className="inline-flex items-center gap-1 rounded-full bg-[oklch(0.89_0.17_178_/_10%)] pl-2.5 pr-1 py-0.5 text-xs font-medium text-[oklch(0.35_0.08_178)]"
                         >
                           {p.name}
                           <button
                             type="button"
                             onClick={() => setSelectedPersonnel((prev) => prev.filter((x) => x !== id))}
-                            className="rounded-full p-0.5 hover:bg-[oklch(0.68_0.155_220_/_20%)] transition-colors"
+                            className="rounded-full p-0.5 hover:bg-[oklch(0.89_0.17_178_/_20%)] transition-colors"
                           >
                             <X className="h-3 w-3" />
                           </button>

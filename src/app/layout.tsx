@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { DM_Sans, Outfit, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/session-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-const dmSans = DM_Sans({
+const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const outfit = Outfit({
+const interDisplay = Inter({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["500", "600", "700", "800"],
@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="no">
       <body
-        className={`${dmSans.variable} ${outfit.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${interDisplay.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider>
           <TooltipProvider>{children}</TooltipProvider>

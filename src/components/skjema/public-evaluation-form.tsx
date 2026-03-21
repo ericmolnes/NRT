@@ -43,7 +43,7 @@ function SubCriteriaGroup({
       {children.map((sub) => (
         <div key={sub.key} className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.68_0.155_220_/_50%)] shrink-0" />
+            <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.89_0.17_178_/_50%)] shrink-0" />
             <Label className="text-xs font-medium text-muted-foreground">{sub.label}</Label>
           </div>
           <div className="pl-3.5">
@@ -130,7 +130,7 @@ function PersonnelSearch({
       <input type="hidden" name="personnelId" value={selectedId} />
       <div className="relative">
         {selectedPerson ? (
-          <div className="flex items-center justify-between rounded-lg border border-[oklch(0.68_0.155_220_/_30%)] bg-[oklch(0.68_0.155_220_/_5%)] px-3 py-2">
+          <div className="flex items-center justify-between rounded-lg border border-[oklch(0.89_0.17_178_/_30%)] bg-[oklch(0.89_0.17_178_/_5%)] px-3 py-2">
             <div>
               <span className="text-sm font-medium">{selectedPerson.name}</span>
             </div>

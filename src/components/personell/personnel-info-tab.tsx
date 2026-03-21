@@ -34,7 +34,6 @@ interface Personnel {
   email: string | null;
   phone: string | null;
   department: string | null;
-  rig: string | null;
 }
 
 interface FieldCategory {
@@ -79,7 +78,6 @@ const basicFields = [
   { key: "email", label: "E-post" },
   { key: "phone", label: "Telefon" },
   { key: "department", label: "Avdeling" },
-  { key: "rig", label: "Rigg" },
 ] as const;
 
 export function PersonnelInfoTab({

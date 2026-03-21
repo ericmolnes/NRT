@@ -1,31 +1,24 @@
 import { signIn } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { NrtLogo } from "@/components/brand/nrt-logo";
 
 export default function LoginPage() {
   return (
     <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Logo / Brand */}
       <div className="mb-10 text-center">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-[oklch(0.68_0.155_220)] shadow-lg shadow-[oklch(0.68_0.155_220_/_20%)]">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            className="h-7 w-7 text-white"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
-          </svg>
+        <div className="relative mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[oklch(0.89_0.17_178_/_15%)]">
+          <NrtLogo size={36} className="text-[oklch(0.89_0.17_178)]" />
+          <div
+            className="pointer-events-none absolute inset-0 rounded-2xl"
+            style={{ boxShadow: "0 0 30px oklch(0.89 0.17 178 / 25%), 0 0 60px oklch(0.89 0.17 178 / 10%)" }}
+          />
         </div>
         <h1
           className="text-2xl font-bold tracking-tight text-white"
           style={{ fontFamily: "var(--font-display)" }}
         >
-          Nordic Rig Tech
+          Nordic RigTech
         </h1>
         <p className="mt-1.5 text-sm text-[oklch(0.65_0.015_250)]">
           Intern verktøyplattform
@@ -49,7 +42,7 @@ export default function LoginPage() {
         >
           <Button
             type="submit"
-            className="w-full h-11 bg-[oklch(0.68_0.155_220)] text-white font-semibold hover:bg-[oklch(0.63_0.155_220)] shadow-lg shadow-[oklch(0.68_0.155_220_/_25%)] transition-all duration-200 hover:shadow-[oklch(0.68_0.155_220_/_35%)] hover:-translate-y-px"
+            className="w-full h-11 bg-[oklch(0.89_0.17_178)] text-[oklch(0.12_0.025_250)] font-semibold hover:bg-[oklch(0.84_0.17_178)] shadow-lg shadow-[oklch(0.89_0.17_178_/_25%)] transition-all duration-200 hover:shadow-[oklch(0.89_0.17_178_/_35%)] hover:-translate-y-px"
           >
             <svg
               className="mr-2 h-4 w-4"

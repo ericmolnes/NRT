@@ -92,7 +92,7 @@ export default async function InnleidePage({ searchParams }: PageProps) {
             <CardTitle className="text-sm font-medium">Med kompetanse</CardTitle>
             <Wrench
               className="h-4 w-4"
-              style={{ color: "var(--nrt-teal, oklch(0.68 0.155 220))" }}
+              style={{ color: "var(--nrt-teal, oklch(0.89 0.17 178))" }}
             />
           </CardHeader>
           <CardContent>

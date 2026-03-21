@@ -6,7 +6,7 @@ export default function PublicLayout({
   return (
     <div className="relative flex min-h-screen flex-col items-center overflow-hidden bg-[oklch(0.965_0.006_250)]">
       {/* Top accent bar */}
-      <div className="h-1.5 w-full bg-gradient-to-r from-[oklch(0.68_0.155_220)] via-[oklch(0.58_0.18_240)] to-[oklch(0.68_0.155_220)]" />
+      <div className="h-1.5 w-full bg-gradient-to-r from-[oklch(0.89_0.17_178)] via-[oklch(0.58_0.18_240)] to-[oklch(0.89_0.17_178)]" />
 
       {/* Subtle dot pattern */}
       <div
@@ -21,7 +21,7 @@ export default function PublicLayout({
       <div
         className="pointer-events-none absolute top-0 left-0 right-0 h-80"
         style={{
-          background: `radial-gradient(ellipse 800px 300px at 50% 0%, oklch(0.68_0.155_220_/_6%), transparent)`,
+          background: `radial-gradient(ellipse 800px 300px at 50% 0%, oklch(0.89_0.17_178_/_6%), transparent)`,
         }}
       />
 
