@@ -11,8 +11,7 @@ import {
 } from "@/lib/ai/match-candidates";
 import { revalidatePath } from "next/cache";
 import ExcelJS from "exceljs";
-
-const CORPORATION_ID = process.env.RECMAN_CORPORATION_ID || "2484";
+import { createCandidateWithPersonnel } from "@/lib/personell/create-candidate";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -411,80 +410,10 @@ function mergeStringArray(
   if (fresh.length > 0) target[key] = [...arr, ...fresh];
 }
 
-// ─── Create new candidate ───────────────────────────────────────────
-// Oppretter kun lokalt i NRT-databasen. Recman-sync (cron kl 06:00)
-// tar seg av å pushe til Recman API ved neste kjøring.
-
 async function handleCreate(decision: ImportDecision) {
   const { rowData } = decision;
-
-  // Generate a temporary local recmanId (will be replaced by real ID after sync)
-  const tempRecmanId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-  const candidate = await db.$transaction(async (tx) => {
-    const created = await tx.recmanCandidate.create({
-      data: {
-        recmanId: tempRecmanId,
-        corporationId: CORPORATION_ID,
-        firstName: rowData.firstName,
-        lastName: rowData.lastName,
-        email: rowData.email || null,
-        phone: rowData.phone || null,
-        mobilePhone: rowData.mobilePhone || null,
-        title: rowData.title || null,
-        description: rowData.description || null,
-        address: rowData.address || null,
-        postalCode: rowData.postalCode || null,
-        postalPlace: rowData.postalPlace || null,
-        city: rowData.city || null,
-        country: rowData.country || null,
-        nationality: rowData.nationality || null,
-        gender: rowData.gender || null,
-        dob: safeParseDate(rowData.dob),
-        rating: rowData.rating ?? 0,
-        linkedIn: rowData.linkedIn || null,
-        isEmployee: false,
-        isContractor: rowData.isContractor || false,
-        skills: rowData.skills?.map((name) => ({ name })) || [],
-        courses: rowData.courses?.map((name) => ({ name })) || [],
-        languages: rowData.languages?.map((name) => ({ name })) || [],
-        driversLicense: rowData.driversLicense || [],
-        education: [],
-        experience: [],
-        references: [],
-        attributes: [],
-        lastSyncedAt: new Date(),
-      },
-    });
-
-    if (rowData.isContractor) {
-      await tx.contractorPeriod.create({
-        data: {
-          recmanCandidateId: created.id,
-          startDate: new Date(),
-          company: rowData.company || null,
-        },
-      });
-
-      const personnel = await tx.personnel.create({
-        data: {
-          name: `${rowData.firstName} ${rowData.lastName}`,
-          email: rowData.email || null,
-          role: "Innleid",
-          status: "ACTIVE",
-        },
-      });
-
-      await tx.recmanCandidate.update({
-        where: { id: created.id },
-        data: { personnelId: personnel.id },
-      });
-    }
-
-    return created;
-  });
-
-  console.log(`[import] created local candidate ${candidate.id} (${rowData.firstName} ${rowData.lastName})`);
+  const id = await createCandidateWithPersonnel(rowData);
+  console.log(`[import] created local candidate ${id} (${rowData.firstName} ${rowData.lastName})`);
 }
 
 // ─── Merge with existing candidate ──────────────────────────────────

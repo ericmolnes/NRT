@@ -162,7 +162,8 @@ export async function getContractorStats() {
     }),
     db.recmanCandidate.count({
       where: {
-        contractorPeriods: { some: { endDate: { not: null } } },
+        isContractor: false,
+        contractorPeriods: { some: {} },
       },
     }),
     db.recmanCandidate.count({
@@ -192,6 +193,8 @@ export async function toggleContractorWithHistory(candidateId: string) {
     where: { id: candidateId },
     select: {
       isContractor: true,
+      isEmployee: true,
+      employeeEnd: true,
       firstName: true,
       lastName: true,
       email: true,
@@ -205,6 +208,9 @@ export async function toggleContractorWithHistory(candidateId: string) {
   });
   if (!candidate)
     return { success: false as const, error: "Kandidat ikke funnet" };
+
+  const isCurrentEmployee =
+    candidate.isEmployee && candidate.employeeEnd === null;
 
   if (candidate.isContractor) {
     // ─── Deaktiver: lukk aktiv periode, sett isContractor=false ────
@@ -223,11 +229,16 @@ export async function toggleContractorWithHistory(candidateId: string) {
         data: { isContractor: false },
       });
 
-      // If linked to Personnel, set status INACTIVE
-      if (candidate.personnelId) {
+      // Keep ACTIVE if they're still an internal employee loaned out briefly.
+      if (candidate.personnelId && !isCurrentEmployee) {
         await tx.personnel.update({
           where: { id: candidate.personnelId },
           data: { status: "INACTIVE" },
+        });
+      } else if (candidate.personnelId && isCurrentEmployee) {
+        await tx.personnel.update({
+          where: { id: candidate.personnelId },
+          data: { role: "Ansatt" },
         });
       }
     });

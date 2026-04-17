@@ -10,17 +10,14 @@ interface EvaluationFilters {
 export async function getEvaluations(filters?: EvaluationFilters) {
   const where: Prisma.EvaluationWhereInput = {};
 
-  if (filters?.search) {
-    where.personnel = {
-      name: { contains: filters.search, mode: "insensitive" },
-    };
-  }
-
-  if (filters?.role) {
-    where.personnel = {
-      ...(where.personnel as Prisma.PersonnelWhereInput),
-      role: filters.role,
-    };
+  const personnelWhere: Prisma.PersonnelWhereInput = {
+    ...(filters?.search
+      ? { name: { contains: filters.search, mode: "insensitive" } }
+      : {}),
+    ...roleFilterWhere(filters?.role),
+  };
+  if (Object.keys(personnelWhere).length > 0) {
+    where.personnel = personnelWhere;
   }
 
   if (filters?.scoreRange) {
@@ -50,7 +47,7 @@ export async function getEvaluationById(id: string) {
 export async function getEvaluationStats() {
   const [totalPersonnel, totalEvaluations, avgResult, latestEvaluation] =
     await Promise.all([
-      db.personnel.count(),
+      db.personnel.count({ where: { status: "ACTIVE" } }),
       db.evaluation.count(),
       db.evaluation.aggregate({ _avg: { score: true } }),
       db.evaluation.findFirst({ orderBy: { createdAt: "desc" } }),
@@ -64,27 +61,59 @@ export async function getEvaluationStats() {
   };
 }
 
-export async function getAllPersonnel() {
+function roleFilterWhere(
+  roleFilter?: string | null
+): Prisma.PersonnelWhereInput {
+  if (!roleFilter) return {};
+  if (roleFilter === "Innleid") {
+    return {
+      OR: [
+        { recmanCandidate: { isContractor: true } },
+        { recmanCandidate: { contractorPeriods: { some: {} } } },
+        { recmanCandidate: null, role: "Innleid" },
+      ],
+    };
+  }
+  if (roleFilter === "Ansatt") {
+    return {
+      OR: [
+        { recmanCandidate: { isEmployee: true, isContractor: false } },
+        { recmanCandidate: null, role: "Ansatt" },
+      ],
+    };
+  }
+  return { role: roleFilter };
+}
+
+export async function getAllPersonnel(roleFilter?: string | null) {
   return db.personnel.findMany({
     select: {
       id: true,
       name: true,
       role: true,
-      recmanCandidate: { select: { corporationId: true } },
+      recmanCandidate: {
+        select: {
+          corporationId: true,
+          isContractor: true,
+          isEmployee: true,
+        },
+      },
     },
-    where: { status: "ACTIVE" },
+    where: {
+      status: "ACTIVE",
+      ...roleFilterWhere(roleFilter),
+    },
     orderBy: { name: "asc" },
   });
 }
 
-/** Minimal personnel data for unauthenticated public forms (evaluation links).
- *  Includes both active employees and contractors (innleide). */
+/** Includes INACTIVE so former contractors stay evaluatable via old links. */
 export async function getPersonnelForPublicForm(roleFilter?: string | null) {
   return db.personnel.findMany({
     select: { id: true, name: true, role: true },
     where: {
-      status: "ACTIVE",
-      ...(roleFilter ? { role: roleFilter } : {}),
+      status: { not: "ARCHIVED" },
+      ...roleFilterWhere(roleFilter),
     },
     orderBy: { name: "asc" },
   });
@@ -123,14 +152,13 @@ interface GroupedFilters {
 export async function getGroupedEvaluations(
   filters?: GroupedFilters
 ): Promise<GroupedEvaluation[]> {
-  const where: Prisma.PersonnelWhereInput = { status: "ACTIVE" };
-
-  if (filters?.search) {
-    where.name = { contains: filters.search, mode: "insensitive" };
-  }
-  if (filters?.role) {
-    where.role = filters.role;
-  }
+  const where: Prisma.PersonnelWhereInput = {
+    status: "ACTIVE",
+    ...(filters?.search
+      ? { name: { contains: filters.search, mode: "insensitive" } }
+      : {}),
+    ...roleFilterWhere(filters?.role),
+  };
 
   const personnel = await db.personnel.findMany({
     where: {

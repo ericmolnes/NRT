@@ -19,7 +19,11 @@ interface Personnel {
   id: string;
   name: string;
   role: string;
-  recmanCandidate: { corporationId: string | null } | null;
+  recmanCandidate: {
+    corporationId: string | null;
+    isContractor: boolean;
+    isEmployee: boolean;
+  } | null;
 }
 
 interface Category {
@@ -259,8 +263,17 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
     if (deptFilter) {
       result = result.filter((p) => p.recmanCandidate?.corporationId === deptFilter);
     }
-    if (roleFilter) {
-      result = result.filter((p) => p.role === roleFilter);
+    if (roleFilter === "Innleid") {
+      result = result.filter(
+        (p) => p.recmanCandidate?.isContractor === true || p.role === "Innleid"
+      );
+    } else if (roleFilter === "Ansatt") {
+      result = result.filter(
+        (p) =>
+          (p.recmanCandidate?.isEmployee === true &&
+            p.recmanCandidate?.isContractor !== true) ||
+          (!p.recmanCandidate && p.role === "Ansatt")
+      );
     }
     return result;
   }, [personnel, deptFilter, roleFilter]);

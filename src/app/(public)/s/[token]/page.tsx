@@ -68,10 +68,10 @@ export default async function PublicFormPage({ params }: PageProps) {
     // Single person lock (legacy)
     personnelList = [{ id: link.personnel!.id, name: link.personnel!.name, role: link.personnel!.role }];
   } else if (personnelIdsArr && personnelIdsArr.length > 0) {
-    // Multi-person lock: fetch only those people directly
+    // Allow INACTIVE so former contractors stay evaluatable via old links.
     personnelList = await db.personnel.findMany({
       select: { id: true, name: true, role: true },
-      where: { id: { in: personnelIdsArr }, status: "ACTIVE" },
+      where: { id: { in: personnelIdsArr }, status: { not: "ARCHIVED" } },
       orderBy: { name: "asc" },
     });
   } else {

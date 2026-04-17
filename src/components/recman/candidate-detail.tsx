@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { updateCandidate } from "@/app/(authenticated)/personell/kandidater/actions";
+import { toggleContractorWithHistory } from "@/app/(authenticated)/personell/innleide/actions";
 import { EX_SKILL_KEYWORDS, SAFETY_SKILL_KEYWORDS } from "@/lib/recman/types";
 import { ScoreBadge } from "@/components/evaluering/score-badge";
 
@@ -130,6 +131,26 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
     : baseTabs;
 
   const [tab, setTab] = useState("oversikt");
+  const [isTogglingContractor, startContractorTransition] = useTransition();
+
+  function handleContractorToggle() {
+    const isActivating = !c.isContractor;
+    const confirmMsg = isActivating
+      ? `Marker ${c.firstName} ${c.lastName} som innleid? De vil bli tilgjengelige for evaluering og skjemaer.`
+      : `Fjern innleid-status for ${c.firstName} ${c.lastName}? Aktiv periode lukkes.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    startContractorTransition(async () => {
+      const result = await toggleContractorWithHistory(c.id);
+      if (result.success) {
+        onUpdated?.();
+      } else if ("error" in result && result.error) {
+        alert(result.error);
+      }
+    });
+  }
+
+  const canToggleContractor = !c.isEmployee || c.employeeEnd !== null;
 
   const skills = (c.skills as Skill[]) || [];
   const education = (c.education as Education[]) || [];
@@ -145,7 +166,7 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           {!embedded && (
             <Link href="/personell/kandidater" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mb-2">
@@ -183,6 +204,22 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
             )}
           </div>
         </div>
+        {canToggleContractor && (
+          <Button
+            onClick={handleContractorToggle}
+            disabled={isTogglingContractor}
+            variant={c.isContractor ? "outline" : "default"}
+            size="sm"
+            className="shrink-0"
+          >
+            {isTogglingContractor ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <HardHat className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            {c.isContractor ? "Fjern innleid-status" : "Marker som innleid"}
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
