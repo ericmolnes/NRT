@@ -38,6 +38,7 @@ import { ScoreBadge } from "@/components/evaluering/score-badge";
 import { getCandidateDetail } from "@/app/(authenticated)/recman/actions";
 import { toggleContractorWithHistory } from "@/app/(authenticated)/personell/innleide/actions";
 import { ImportWizard } from "@/components/innleide/import-wizard";
+import { CreatePersonSheet } from "@/components/personell/create-person-sheet";
 
 type Contractor = {
   id: string;
@@ -194,7 +195,9 @@ export function ContractorListView({
           </Button>
         </form>
 
-        <Button size="sm" onClick={() => setImportOpen(true)}>
+        <CreatePersonSheet defaultContractor={true} triggerLabel="Ny innleid" />
+
+        <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
           <Upload className="h-4 w-4 mr-1" />
           Importer
         </Button>

@@ -10,12 +10,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PersonnelList } from "@/components/personell/personnel-list";
 import { PersonnelFilters } from "@/components/personell/personnel-filters";
-import { Users, UserCheck, Link2, Plus } from "lucide-react";
-import Link from "next/link";
+import { CreatePersonSheet } from "@/components/personell/create-person-sheet";
+import { Users, UserCheck, Link2 } from "lucide-react";
 
 interface PageProps {
   searchParams: Promise<{
@@ -53,10 +52,7 @@ export default async function PersonnelPage({ searchParams }: PageProps) {
             Samlet oversikt over ansatte med synk-status.
           </p>
         </div>
-        <Button render={<Link href="/personell/ny" />}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nytt personell
-        </Button>
+        <CreatePersonSheet defaultContractor={false} triggerLabel="Nytt personell" />
       </div>
 
       <div className="stagger-in grid gap-4 md:grid-cols-2 lg:grid-cols-4">
