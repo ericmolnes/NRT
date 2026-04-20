@@ -1,13 +1,62 @@
 import { PrismaNeon } from "@prisma/adapter-neon";
 import { PrismaClient } from "../src/generated/prisma/client.js";
+import { randomBytes, createCipheriv } from "node:crypto";
 
 const adapter = new PrismaNeon({
   connectionString: process.env.DATABASE_URL!,
 });
 const prisma = new PrismaClient({ adapter });
 
+/** Krypterer clientKey med AES-256-GCM (samme logikk som lib/poweroffice/crypto.ts) */
+function encryptClientKey(plaintext: string): string {
+  const hex = process.env.POWEROFFICE_ENCRYPTION_KEY;
+  if (!hex || hex.length !== 64) {
+    throw new Error(
+      "POWEROFFICE_ENCRYPTION_KEY mangler. Generer med: openssl rand -hex 32"
+    );
+  }
+  const key = Buffer.from(hex, "hex");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString("base64");
+}
+
 async function main() {
   console.log("Seeder arbeidsnormer og rateprofiler...");
+
+  // ─── PowerOffice demo-klient ─────────────────────────────────────
+  const appKey = process.env.POWEROFFICE_APPLICATION_KEY;
+  const clientKey = process.env.POWEROFFICE_CLIENT_KEY;
+  const subKey = process.env.POWEROFFICE_SUBSCRIPTION_KEY;
+  const encKey = process.env.POWEROFFICE_ENCRYPTION_KEY;
+
+  if (appKey && clientKey && subKey && encKey) {
+    await prisma.powerOfficeClient.upsert({
+      where: { tenantSlug: "demo-nrt" },
+      update: {
+        applicationKey: appKey,
+        subscriptionKey: subKey,
+        encryptedClientKey: encryptClientKey(clientKey),
+      },
+      create: {
+        tenantSlug: "demo-nrt",
+        displayName: "Nordic Rig Tech AS - API Test Client",
+        environment: "demo",
+        applicationKey: appKey,
+        subscriptionKey: subKey,
+        encryptedClientKey: encryptClientKey(clientKey),
+        onboardedBy: "seed-script",
+        onboardedAt: new Date(),
+      },
+    });
+    console.log("PowerOffice demo-klient seedet (demo-nrt).");
+  } else {
+    console.log(
+      "Hopper over PowerOffice seed — mangler POWEROFFICE_APPLICATION_KEY, POWEROFFICE_CLIENT_KEY, POWEROFFICE_SUBSCRIPTION_KEY eller POWEROFFICE_ENCRYPTION_KEY."
+    );
+  }
 
   // ─── Arbeidsnormer ──────────────────────────────────────────────────
 

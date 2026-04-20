@@ -511,8 +511,30 @@ model ResourceAllocation {
   @@index([jobAssignmentId])
 }
 
+// ─── PowerOffice: Multi-tenant klientkonfigurasjon ───────────────
+
+model PowerOfficeClient {
+  id                 String   @id @default(cuid())
+  tenantSlug         String   @unique // "nevy-elektro", "em-group", "nrt", "nevy-vp"
+  displayName        String           // "Nevy Elektro AS"
+  environment        String   @default("demo") // "demo" | "production"
+  applicationKey     String
+  subscriptionKey    String
+  encryptedClientKey String           // AES-256-GCM kryptert
+  onboardedAt        DateTime?
+  onboardedBy        String?
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+// ─── PowerOffice: Synkroniseringslogg ─────────────────────────────
+
 model POSyncLog {
   id            String    @id @default(cuid())
+  tenantSlug    String    @default("demo-nrt")
   resourceType  String
   direction     String
   status        String
@@ -524,6 +546,7 @@ model POSyncLog {
   completedAt   DateTime?
   triggeredBy   String
 
+  @@index([tenantSlug])
   @@index([resourceType])
   @@index([status])
   @@index([startedAt])
@@ -531,7 +554,8 @@ model POSyncLog {
 
 model POCustomer {
   id                 String      @id @default(cuid())
-  poId               BigInt      @unique
+  tenantSlug         String      @default("demo-nrt")
+  poId               BigInt
   code               Int?
   name               String
   organizationNumber String?
@@ -547,6 +571,8 @@ model POCustomer {
   projects           POProject[]
   customer           Customer?
 
+  @@unique([tenantSlug, poId])
+  @@index([tenantSlug])
   @@index([name])
   @@index([code])
   @@index([lastSyncedAt])
@@ -554,7 +580,8 @@ model POCustomer {
 
 model POProject {
   id           String      @id @default(cuid())
-  poId         BigInt      @unique
+  tenantSlug   String      @default("demo-nrt")
+  poId         BigInt
   code         String?
   name         String
   description  String?
@@ -568,6 +595,8 @@ model POProject {
   customer     POCustomer? @relation(fields: [customerId], references: [id])
   project      Project?
 
+  @@unique([tenantSlug, poId])
+  @@index([tenantSlug])
   @@index([name])
   @@index([code])
   @@index([customerId])
@@ -576,7 +605,8 @@ model POProject {
 
 model POEmployee {
   id           String     @id @default(cuid())
-  poId         BigInt     @unique
+  tenantSlug   String     @default("demo-nrt")
+  poId         BigInt
   code         String?
   firstName    String
   lastName     String
@@ -592,6 +622,8 @@ model POEmployee {
   personnelId  String?    @unique
   personnel    Personnel? @relation(fields: [personnelId], references: [id])
 
+  @@unique([tenantSlug, poId])
+  @@index([tenantSlug])
   @@index([lastName])
   @@index([email])
   @@index([lastSyncedAt])
@@ -599,7 +631,8 @@ model POEmployee {
 
 model POInvoice {
   id            String      @id @default(cuid())
-  poId          BigInt      @unique
+  tenantSlug    String      @default("demo-nrt")
+  poId          BigInt
   invoiceNumber String?
   status        String?
   customerId    String?
@@ -616,6 +649,8 @@ model POInvoice {
   customer      POCustomer? @relation(fields: [customerId], references: [id])
   project       POProject?  @relation(fields: [projectId], references: [id])
 
+  @@unique([tenantSlug, poId])
+  @@index([tenantSlug])
   @@index([invoiceNumber])
   @@index([customerId])
   @@index([projectId])
