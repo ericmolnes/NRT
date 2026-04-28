@@ -8,6 +8,9 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { signOut } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/lib/notifications/create-notification";
+import { sendAccessRequestEmail } from "@/lib/notifications/send-access-request-email";
+import type { NotificationClient } from "@/lib/notifications/types";
 
 /**
  * Opprett en tilgangsforespørsel for innlogget bruker hvis det ikke
@@ -20,6 +23,15 @@ import { revalidatePath } from "next/cache";
  * tar likevel imot overgangen. Hvis vi ønsker absolutt garanti kan vi senere
  * legge til en partial unique index på (email, status) WHERE status = 'PENDING'
  * (krever rå SQL — bevisst utsatt).
+ *
+ * **Varsling:** Når vi faktisk oppretter en ny rad lager vi også en
+ * SystemNotification rettet mot ADMIN-nivå (atomisk i samme transaksjon —
+ * billig skriving, og vi vil ikke at admin går glipp av en forespørsel
+ * fordi varslet feilet). E-postvarslet sendes ETTER transaksjonen, slik
+ * at en treg eller feilende SMTP-server ikke kan rulle tilbake selve
+ * forespørselen. Helperen `sendAccessRequestEmail` er "fail open" — den
+ * kaster aldri, så belt-and-suspenders `.catch` er bare for sikkerhets
+ * skyld i tilfelle vi senere endrer kontrakten.
  */
 export async function requestAccess(reason?: string): Promise<{
   ok: boolean;
@@ -43,7 +55,7 @@ export async function requestAccess(reason?: string): Promise<{
       return { alreadyExists: true as const };
     }
 
-    await tx.accessRequest.create({
+    const created = await tx.accessRequest.create({
       data: {
         email,
         entraId,
@@ -52,10 +64,39 @@ export async function requestAccess(reason?: string): Promise<{
         reason: reason?.trim() || null,
         status: "PENDING",
       },
+      select: { id: true },
     });
 
-    return { alreadyExists: false as const };
+    // Atomisk: hvis varslet feiler (mest sannsynlig en DB-feil siden vi
+    // ikke gjør noen nettverkskall her), vil hele transaksjonen rulles
+    // tilbake og vi etterlater ikke en stille forespørsel uten varsel.
+    await createNotification(tx as unknown as NotificationClient, {
+      kind: "ACCESS_REQUEST",
+      severity: "INFO",
+      title: `Ny tilgangsforespørsel fra ${displayName ?? email}`,
+      body: email,
+      payload: { requestId: created.id, email, name: displayName },
+      targetLevel: "ADMIN",
+    });
+
+    return { alreadyExists: false as const, requestId: created.id };
   });
+
+  // E-post sendes ETTER transaksjonen: en treg SMTP-server skal aldri
+  // forsinke eller rulle tilbake selve forespørselen. Helperen er "fail
+  // open" og returnerer { skipped } istedenfor å kaste, men vi pakker
+  // likevel inn en defensiv catch i tilfelle kontrakten endres senere.
+  if (!result.alreadyExists) {
+    await sendAccessRequestEmail({
+      userName: displayName ?? email,
+      userEmail: email,
+    }).catch((err) => {
+      console.error(
+        "[notifications] uventet feil fra sendAccessRequestEmail:",
+        err
+      );
+    });
+  }
 
   revalidatePath("/waiting-access");
   return { ok: true, alreadyExists: result.alreadyExists };

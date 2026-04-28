@@ -13,6 +13,7 @@ import { SyncButton } from "@/components/poweroffice/sync-button";
 import { SyncButton as RecmanSyncButton } from "@/components/recman/sync-button";
 import { AiModelSetting } from "@/components/settings/ai-model-setting";
 import { AccessRequestsPanel } from "@/components/settings/access-requests-panel";
+import { NotificationsPanel } from "@/components/settings/notifications-panel";
 import { saveAiModel } from "./actions";
 import {
   User,
@@ -27,6 +28,7 @@ import {
   RefreshCw,
   Bot,
   KeyRound,
+  BellRing,
 } from "lucide-react";
 
 export default async function SettingsPage() {
@@ -165,6 +167,23 @@ export default async function SettingsPage() {
           <AccessRequestsPanel />
         </section>
       )}
+
+      {/* ─── Varsler (siste 10) ─── */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-2">
+          <BellRing className="h-4 w-4 text-blue-600" />
+          <h2
+            className="text-sm font-semibold"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
+            Siste varsler
+          </h2>
+        </div>
+        <NotificationsPanel
+          userId={user?.id ?? null}
+          accessLevel={admin ? "ADMIN" : "USER"}
+        />
+      </section>
 
       {/* ─── Admin: Synkronisering ─── */}
       {admin && (

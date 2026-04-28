@@ -3,15 +3,13 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { usePathname } from "next/navigation";
-import { tools, categories } from "@/lib/tools-registry";
+import { categories, getToolForPathname } from "@/lib/tools-registry";
 
 function getPageTitle(pathname: string): { title: string; category?: string } {
   if (pathname === "/dashboard") return { title: "Dashboard" };
   if (pathname === "/settings") return { title: "Innstillinger" };
 
-  const matchedTool = tools.find(
-    (t) => pathname === t.url || pathname.startsWith(t.url + "/")
-  );
+  const matchedTool = getToolForPathname(pathname);
 
   if (matchedTool) {
     const category = categories.find((c) => c.id === matchedTool.category);
@@ -23,9 +21,16 @@ function getPageTitle(pathname: string): { title: string; category?: string } {
 
 interface AppHeaderProps {
   user: { name?: string | null; email?: string | null };
+  /**
+   * Notification-bell rendres som en slot fra server-side layout slik at
+   * vi kan slå opp uleste varsler uten at headeren selv må være en
+   * server-komponent. La det være `null` for brukere uten tilgang til
+   * varsler.
+   */
+  notificationBell?: React.ReactNode;
 }
 
-export function AppHeader({ user }: AppHeaderProps) {
+export function AppHeader({ user, notificationBell }: AppHeaderProps) {
   const pathname = usePathname();
   const { title, category } = getPageTitle(pathname);
 
@@ -48,6 +53,9 @@ export function AppHeader({ user }: AppHeaderProps) {
       </div>
 
       <div className="flex-1" />
+
+      {/* Notifikasjons-bjelle (server-rendret slot) */}
+      {notificationBell}
 
       {/* User indicator */}
       <div className="flex items-center gap-2">

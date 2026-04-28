@@ -6,6 +6,9 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { ALLOWED_MODELS, type AiModel } from "@/lib/ai/get-ai-model";
 import { revalidatePath } from "next/cache";
+import { createNotification } from "@/lib/notifications/create-notification";
+import { markAsRead } from "@/lib/notifications/list-notifications";
+import type { NotificationClient } from "@/lib/notifications/types";
 
 export async function saveAiModel(model: string) {
   const session = await auth();
@@ -162,6 +165,19 @@ export async function approveAccessRequest(
       ],
     });
 
+    // Direkte varsel til brukeren som ble godkjent (om vi kjenner deres
+    // entraId — det er det vi bruker som userId i targetUserId-feltet).
+    if (request.entraId) {
+      await createNotification(tx as unknown as NotificationClient, {
+        kind: "ACCESS_REQUEST",
+        severity: "INFO",
+        title: `Tilgangsforespørselen din ble godkjent (${level})`,
+        body: `Du har nå ${level}-tilgang i NRT internal-tools.`,
+        payload: { requestId: request.id, level },
+        targetUserId: request.entraId,
+      });
+    }
+
     return { userAccessId };
   });
 
@@ -184,7 +200,7 @@ export async function denyAccessRequest(requestId: string, note?: string) {
   // for endringsloggens summary). Status-sjekken gjøres atomisk inne i tx.
   const request = await db.accessRequest.findUnique({
     where: { id: requestId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, entraId: true },
   });
   if (!request) throw new Error("Forespørselen finnes ikke");
 
@@ -225,8 +241,42 @@ export async function denyAccessRequest(requestId: string, note?: string) {
         },
       ],
     });
+
+    // Direkte varsel til brukeren som ble avslått (hvis vi kjenner entraId).
+    if (request.entraId) {
+      await createNotification(tx as unknown as NotificationClient, {
+        kind: "ACCESS_REQUEST",
+        severity: "WARNING",
+        title: "Tilgangsforespørselen din ble avslått",
+        body: note?.trim() || null,
+        payload: { requestId: request.id },
+        targetUserId: request.entraId,
+      });
+    }
   });
 
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+// ─── Notifikasjoner ───────────────────────────────────────────────
+//
+// Markerer et sett notifikasjoner som lest. Brukes av notification-bell
+// i header når brukeren åpner popoveren. Vi krever bare innlogget bruker
+// (ikke admin) — alle skal kunne kvittere ut sine egne varsler. Helperen
+// `markAsRead` filtrerer på `readAt: null` og er idempotent.
+
+/**
+ * Marker en eller flere notifikasjoner som lest. Sikker mot overskriving
+ * av eldre `readAt` (helperen filtrerer på `readAt: null`).
+ */
+export async function markNotificationsRead(ids: string[]) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Ikke autentisert");
+
+  if (!Array.isArray(ids) || ids.length === 0) return { ok: true };
+
+  await markAsRead(db as unknown as NotificationClient, ids);
   revalidatePath("/settings");
   return { ok: true };
 }
