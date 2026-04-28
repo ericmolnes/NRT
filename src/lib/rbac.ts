@@ -1,26 +1,24 @@
 import { auth } from "@/lib/auth";
+import { getCurrentAccess } from "@/lib/access/get-current-access";
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
+/**
+ * Sjekker om innlogget bruker har ADMIN-tilgang.
+ *
+ * Bruker den nye tilgangsmodellen (UserAccess) som primær kilde, med
+ * ADMIN_EMAILS / ADMIN_GROUP_ID som bootstrap for nye brukere uten rad.
+ */
 export async function isAdmin(): Promise<boolean> {
-  const session = await auth();
-  if (!session?.user) return false;
+  const access = await getCurrentAccess();
+  return access.level === "ADMIN";
+}
 
-  // Check by email
-  if (session.user.email && ADMIN_EMAILS.includes(session.user.email.toLowerCase())) {
-    return true;
-  }
-
-  // Check by Azure AD group
-  const adminGroupId = process.env.ADMIN_GROUP_ID;
-  if (adminGroupId && session.user.groups?.includes(adminGroupId)) {
-    return true;
-  }
-
-  return false;
+/**
+ * Sjekker om innlogget bruker har minst USER-tilgang (USER eller ADMIN).
+ * Brukere med MINIMUM-tilgang (eller uautentiserte) returnerer false.
+ */
+export async function isUser(): Promise<boolean> {
+  const access = await getCurrentAccess();
+  return access.level === "USER" || access.level === "ADMIN";
 }
 
 export async function hasGroup(groupId: string): Promise<boolean> {
@@ -51,6 +49,17 @@ export async function assertCanModify(resource: {
  */
 export async function assertAdmin(): Promise<void> {
   if (!(await isAdmin())) {
+    throw new Error("Ikke autorisert");
+  }
+}
+
+/**
+ * Verify that the current user has at least USER access. Throws if MINIMUM
+ * or unauthenticated. Brukes av server actions og sider som ikke skal
+ * være tilgjengelige før admin har gitt tilgang.
+ */
+export async function assertUser(): Promise<void> {
+  if (!(await isUser())) {
     throw new Error("Ikke autorisert");
   }
 }

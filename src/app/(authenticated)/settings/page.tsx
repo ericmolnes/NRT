@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { SyncButton } from "@/components/poweroffice/sync-button";
 import { SyncButton as RecmanSyncButton } from "@/components/recman/sync-button";
 import { AiModelSetting } from "@/components/settings/ai-model-setting";
+import { AccessRequestsPanel } from "@/components/settings/access-requests-panel";
 import { saveAiModel } from "./actions";
 import {
   User,
@@ -25,6 +26,7 @@ import {
   Cloud,
   RefreshCw,
   Bot,
+  KeyRound,
 } from "lucide-react";
 
 export default async function SettingsPage() {
@@ -147,6 +149,22 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       </section>
+
+      {/* ─── Admin: Tilgangsforespørsler ─── */}
+      {admin && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-amber-600" />
+            <h2
+              className="text-sm font-semibold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              Tilgangsforespørsler
+            </h2>
+          </div>
+          <AccessRequestsPanel />
+        </section>
+      )}
 
       {/* ─── Admin: Synkronisering ─── */}
       {admin && (

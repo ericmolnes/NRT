@@ -12,6 +12,15 @@ export default async function AuthenticatedLayout({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  // Brukere med MINIMUM-tilgang (eller uten oppløst nivå) skal ikke kunne
+  // se noe under (authenticated). Send dem til ventesiden i stedet. Selve
+  // /waiting-access-siden ligger utenfor (authenticated)-gruppen for å
+  // unngå rekursiv redirect.
+  const level = session.user.accessLevel ?? "MINIMUM";
+  if (level === "MINIMUM") {
+    redirect("/waiting-access");
+  }
+
   return (
     <SidebarProvider>
       <AppSidebar user={session.user} />
