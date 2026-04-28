@@ -1,14 +1,11 @@
-import {
-  searchCandidates,
-  getCandidateStats,
-} from "@/app/(authenticated)/recman/actions";
+import { getPersonnelishList } from "@/lib/queries/personnel-list";
+import { getCandidateStats } from "@/app/(authenticated)/recman/actions";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Users, Star, Wrench, Award, HardHat } from "lucide-react";
 import { CandidateListView } from "@/components/kandidater/candidate-list-view";
 
@@ -24,13 +21,30 @@ interface PageProps {
   }>;
 }
 
+const PAGE_SIZE = 50;
+
 export default async function KandidaterPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  const page = Math.max(1, parseInt(params.page || "1", 10));
 
-  const [result, stats] = await Promise.all([
-    searchCandidates({ ...params, filter: "candidates" }),
+  const [allRows, stats] = await Promise.all([
+    getPersonnelishList({
+      category: "KANDIDAT",
+      search: params.q,
+      skill: params.skill,
+      city: params.city,
+      minRating: params.minRating ? parseInt(params.minRating, 10) : undefined,
+      license: params.license,
+      language: params.language,
+    }),
     getCandidateStats(),
   ]);
+
+  const total = allRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const candidates = allRows.slice(start, start + PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -115,10 +129,10 @@ export default async function KandidaterPage({ searchParams }: PageProps) {
 
       {/* Kandidatliste */}
       <CandidateListView
-        candidates={result.candidates}
-        total={result.total}
-        totalPages={result.totalPages}
-        currentPage={result.currentPage}
+        candidates={candidates}
+        total={total}
+        totalPages={totalPages}
+        currentPage={currentPage}
         filters={params}
       />
     </div>

@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import { recmanPost, getCandidateById } from "@/lib/recman/client";
 import { CANDIDATE_BASIC_FIELDS } from "@/lib/recman/types";
 import {
@@ -10,7 +11,6 @@ import {
   candidateAttributeSchema,
 } from "@/lib/validations/candidate";
 import { buildLocalCandidateCreateData } from "@/lib/personell/candidate-data";
-import { transitionCategory } from "@/lib/personell/transition-category";
 import { revalidatePath } from "next/cache";
 
 const CORPORATION_ID = () => process.env.RECMAN_CORPORATION_ID || "2484";
@@ -185,53 +185,72 @@ export async function updateCandidateAttributes(
   return { success: true as const };
 }
 
-// ─── Toggle innleid-status ─────────────────────────────────────────
-//
-// Bakoverkompatibel shim. Selve overgangen gjøres i `transitionCategory`
-// (se `src/lib/personell/transition-category.ts`) som håndterer
-// ContractorPeriod-historikk og endringslogg på samme sted.
-
-export async function toggleContractor(candidateId: string) {
-  const candidate = await db.recmanCandidate.findUnique({
-    where: { id: candidateId },
-    select: { isContractor: true, contractorPeriods: { where: { endDate: null }, take: 1 } },
-  });
-  if (!candidate) return { success: false as const, error: "Kandidat ikke funnet" };
-
-  const isCurrentlyContractor = candidate.isContractor || candidate.contractorPeriods.length > 0;
-  const target = isCurrentlyContractor ? "KANDIDAT" : "INNLEID";
-
-  const result = await transitionCategory({ recmanCandidateId: candidateId }, target);
-  if (!result.success) return { success: false as const, error: result.error };
-
-  revalidatePath("/personell/kandidater");
-  revalidatePath("/personell/innleide");
-  revalidatePath("/personell");
-  return { success: true as const, isContractor: target === "INNLEID" };
-}
-
 // ─── Fjern ansettelse (sett employeeEnd til i dag) ─────────────────
+//
+// Eneste lovlige vei ut av ANSATT-kategorien: setter `employeeEnd` til
+// "nå", som — kombinert med `resolveCategory`-reglene — flytter personen
+// til KANDIDAT (eller INNLEID hvis vedkommende fortsatt har en åpen
+// contractor-periode). Skriver inn i ChangeLog atomisk med selve
+// oppdateringen, samme mønster som `transitionCategory`.
 
 export async function removeEmployment(candidateId: string) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Ikke autentisert");
+  const actorId = session.user.id;
+  const actorName = session.user.name ?? null;
 
   const candidate = await db.recmanCandidate.findUnique({
     where: { id: candidateId },
-    select: { recmanId: true, isEmployee: true },
+    select: {
+      recmanId: true,
+      isEmployee: true,
+      employeeEnd: true,
+      personnelId: true,
+    },
   });
   if (!candidate) return { success: false as const, error: "Kandidat ikke funnet" };
   if (!candidate.isEmployee) return { success: false as const, error: "Er ikke registrert som ansatt" };
 
-  // Set employeeEnd locally
-  await db.recmanCandidate.update({
-    where: { id: candidateId },
-    data: { employeeEnd: new Date() },
-  });
+  const newEnd = new Date();
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.recmanCandidate.update({
+        where: { id: candidateId },
+        data: { employeeEnd: newEnd },
+      });
+
+      const log = await tx.changeLog.create({
+        data: {
+          actorType: "USER",
+          actorId,
+          actorName,
+          source: "USER_ACTION",
+          summary: "Avsluttet ansettelse (employeeEnd satt til i dag)",
+        },
+      });
+
+      await tx.changeLogEntry.create({
+        data: {
+          changeLogId: log.id,
+          model: "RecmanCandidate",
+          recordId: candidateId,
+          field: "employeeEnd",
+          oldValue: candidate.employeeEnd?.toISOString() ?? Prisma.JsonNull,
+          newValue: newEnd.toISOString(),
+        },
+      });
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Ukjent feil";
+    return { success: false as const, error: message };
+  }
 
   console.log(`[NRT] removed employment for candidate ${candidateId}`);
 
   revalidatePath("/personell/kandidater");
+  revalidatePath("/personell/innleide");
   revalidatePath("/personell");
   return { success: true as const };
 }

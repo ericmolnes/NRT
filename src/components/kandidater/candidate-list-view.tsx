@@ -33,26 +33,7 @@ import { CandidateDetail } from "@/components/recman/candidate-detail";
 import { getCandidateDetail } from "@/app/(authenticated)/recman/actions";
 import { removeEmployment } from "@/app/(authenticated)/personell/kandidater/actions";
 import { CreateCandidateForm } from "./create-candidate-form";
-
-type Candidate = {
-  id: string;
-  recmanId: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  city: string | null;
-  title: string | null;
-  rating: number;
-  isEmployee: boolean;
-  isContractor: boolean;
-  employeeNumber: number | null;
-  employeeStart: Date | null;
-  employeeEnd: Date | null;
-  skills: unknown;
-  languages: unknown;
-  driversLicense: unknown;
-  contractorPeriods?: Array<{ id: string; startDate: Date; endDate: Date | null }>;
-};
+import type { PersonnelishRow } from "@/lib/queries/personnel-list";
 
 type Filters = {
   q?: string;
@@ -74,7 +55,7 @@ export function CandidateListView({
   currentPage,
   filters,
 }: {
-  candidates: Candidate[];
+  candidates: PersonnelishRow[];
   total: number;
   totalPages: number;
   currentPage: number;
@@ -111,9 +92,9 @@ export function CandidateListView({
     router.push(`?${params.toString()}`);
   }
 
-  function openDetail(candidateId: string) {
+  function openDetail(recmanCandidateId: string) {
     startDetailTransition(async () => {
-      const detail = await getCandidateDetail(candidateId);
+      const detail = await getCandidateDetail(recmanCandidateId);
       setSelectedCandidate(detail);
       setSheetOpen(true);
     });
@@ -129,10 +110,10 @@ export function CandidateListView({
     }
   }
 
-  async function handleRemoveEmployment(candidateId: string) {
-    setPendingAction(candidateId + "-employment");
+  async function handleRemoveEmployment(recmanCandidateId: string) {
+    setPendingAction(recmanCandidateId + "-employment");
     try {
-      const result = await removeEmployment(candidateId);
+      const result = await removeEmployment(recmanCandidateId);
       if (!result.success) console.error("[NRT] remove employment failed:", result.error);
     } catch (e) {
       console.error("[NRT] remove employment error:", e);
@@ -261,39 +242,44 @@ export function CandidateListView({
                 </tr>
               </thead>
               <tbody>
-                {candidates.map((c) => {
-                  const skills = (c.skills as Array<{ name: string }>) || [];
+                {candidates.map((row) => {
+                  const rc = row.recmanCandidate;
+                  const skills = (rc?.skills as Array<{ name: string }> | null) || [];
                   const exSkills = skills.filter((s) =>
                     HIGHLIGHT_SKILL_KEYWORDS.some((kw) =>
                       s.name.toLowerCase().includes(kw)
                     )
                   );
-                  const langs = (c.languages as Array<{ name: string; level: string }>) || [];
-                  const isActingOnThis = pendingAction?.startsWith(c.id);
+                  const langs = (rc?.languages as Array<{ name: string; level: string }> | null) || [];
+                  const isActingOnThis = pendingAction?.startsWith(row.id);
+                  const isEmployee = rc?.isEmployee ?? false;
+                  const employeeEnd = rc?.employeeEnd ?? null;
+                  const contractorPeriods = rc?.contractorPeriods ?? [];
+                  const rating = rc?.rating ?? 0;
 
                   return (
-                    <tr key={c.id} className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${isActingOnThis ? "opacity-60" : ""}`}>
+                    <tr key={row.id} className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${isActingOnThis ? "opacity-60" : ""}`}>
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => openDetail(c.id)}
+                          onClick={() => rc && openDetail(rc.id)}
                           className="font-medium text-primary hover:underline text-left"
-                          disabled={isLoadingDetail}
+                          disabled={isLoadingDetail || !rc}
                         >
-                          {c.firstName} {c.lastName}
+                          {row.name}
                         </button>
-                        {c.email && <div className="text-xs text-muted-foreground">{c.email}</div>}
+                        {row.email && <div className="text-xs text-muted-foreground">{row.email}</div>}
                       </td>
-                      <td className="px-4 py-3 text-sm">{c.title || "—"}</td>
-                      <td className="px-4 py-3 text-sm">{c.city || "—"}</td>
+                      <td className="px-4 py-3 text-sm">{rc?.title || "—"}</td>
+                      <td className="px-4 py-3 text-sm">{rc?.city || "—"}</td>
                       <td className="px-4 py-3 text-center">
-                        {c.isEmployee && !c.employeeEnd ? (
+                        {isEmployee && !employeeEnd ? (
                           <Badge className="text-xs bg-green-600">
                             <Briefcase className="h-3 w-3 mr-1" />
                             Ansatt
                           </Badge>
-                        ) : c.isEmployee && c.employeeEnd ? (
+                        ) : isEmployee && employeeEnd ? (
                           <Badge variant="destructive" className="text-xs">Sluttet</Badge>
-                        ) : c.contractorPeriods && c.contractorPeriods.length > 0 ? (
+                        ) : contractorPeriods.length > 0 ? (
                           <Badge variant="secondary" className="text-xs">
                             <Clock className="h-3 w-3 mr-1" />
                             Tidligere innleid
@@ -303,9 +289,9 @@ export function CandidateListView({
                         )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {c.rating > 0 && (
+                        {rating > 0 && (
                           <div className="flex items-center justify-center gap-0.5">
-                            {Array.from({ length: c.rating }).map((_, i) => (
+                            {Array.from({ length: rating }).map((_, i) => (
                               <Star key={i} className="h-3 w-3 fill-yellow-400 text-yellow-400" />
                             ))}
                           </div>
@@ -332,7 +318,7 @@ export function CandidateListView({
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
                           {/* Fjern ansettelse (kun for aktive ansatte) */}
-                          {c.isEmployee && !c.employeeEnd && (
+                          {rc && isEmployee && !employeeEnd && (
                             <Tooltip>
                               <TooltipTrigger
                                 render={
@@ -340,7 +326,7 @@ export function CandidateListView({
                                     variant="outline"
                                     size="icon"
                                     className="h-7 w-7 text-destructive hover:text-destructive"
-                                    onClick={() => handleRemoveEmployment(c.id)}
+                                    onClick={() => handleRemoveEmployment(rc.id)}
                                     disabled={!!pendingAction}
                                   />
                                 }

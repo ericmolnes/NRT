@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { updateCandidate } from "@/app/(authenticated)/personell/kandidater/actions";
-import { toggleContractorWithHistory } from "@/app/(authenticated)/personell/innleide/actions";
+import { transitionPersonnelCategory } from "@/app/(authenticated)/personell/actions";
 import { EX_SKILL_KEYWORDS, SAFETY_SKILL_KEYWORDS } from "@/lib/recman/types";
 import { ScoreBadge } from "@/components/evaluering/score-badge";
 
@@ -140,8 +140,14 @@ export function CandidateDetail({ candidate: c, embedded = false, onUpdated }: C
       : `Fjern innleid-status for ${c.firstName} ${c.lastName}? Aktiv periode lukkes.`;
     if (!window.confirm(confirmMsg)) return;
 
+    // Eksplisitt target: aktivering → INNLEID, ellers → KANDIDAT.
+    const target = isActivating ? "INNLEID" : "KANDIDAT";
+
     startContractorTransition(async () => {
-      const result = await toggleContractorWithHistory(c.id);
+      const result = await transitionPersonnelCategory(
+        { recmanCandidateId: c.id },
+        target
+      );
       if (result.success) {
         onUpdated?.();
       } else if ("error" in result && result.error) {

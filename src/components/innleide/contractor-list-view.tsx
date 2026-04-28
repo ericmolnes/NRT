@@ -36,39 +36,10 @@ import { SKILL_CATEGORIES, HIGHLIGHT_SKILL_KEYWORDS } from "@/lib/recman/types";
 import { CandidateDetail } from "@/components/recman/candidate-detail";
 import { ScoreBadge } from "@/components/evaluering/score-badge";
 import { getCandidateDetail } from "@/app/(authenticated)/recman/actions";
-import { toggleContractorWithHistory } from "@/app/(authenticated)/personell/innleide/actions";
+import { transitionPersonnelCategory } from "@/app/(authenticated)/personell/actions";
 import { ImportWizard } from "@/components/innleide/import-wizard";
 import { CreatePersonSheet } from "@/components/personell/create-person-sheet";
-
-type Contractor = {
-  id: string;
-  recmanId: string;
-  firstName: string;
-  lastName: string;
-  email: string | null;
-  city: string | null;
-  title: string | null;
-  rating: number;
-  isEmployee: boolean;
-  isContractor: boolean;
-  employeeNumber: number | null;
-  employeeStart: Date | null;
-  employeeEnd: Date | null;
-  skills: unknown;
-  languages: unknown;
-  driversLicense: unknown;
-  contractorPeriods: Array<{
-    id: string;
-    startDate: Date;
-    endDate: Date | null;
-    company: string | null;
-    notes: string | null;
-  }>;
-  personnel: {
-    id: string;
-    evaluations: { score: number }[];
-  } | null;
-};
+import type { PersonnelishRow } from "@/lib/queries/personnel-list";
 
 type Filters = {
   q?: string;
@@ -96,7 +67,7 @@ export function ContractorListView({
   currentPage,
   filters,
 }: {
-  contractors: Contractor[];
+  contractors: PersonnelishRow[];
   total: number;
   totalPages: number;
   currentPage: number;
@@ -134,9 +105,9 @@ export function ContractorListView({
     router.push(`?${params.toString()}`);
   }
 
-  function openDetail(candidateId: string) {
+  function openDetail(recmanCandidateId: string) {
     startDetailTransition(async () => {
-      const detail = await getCandidateDetail(candidateId);
+      const detail = await getCandidateDetail(recmanCandidateId);
       setSelectedCandidate(detail);
       setSheetOpen(true);
     });
@@ -152,10 +123,17 @@ export function ContractorListView({
     }
   }
 
-  async function handleToggleContractor(candidateId: string) {
-    setPendingAction(candidateId + "-contractor");
+  async function handleToggleContractor(row: PersonnelishRow) {
+    if (!row.recmanCandidateId) return;
+    setPendingAction(row.id + "-contractor");
+    const isCurrentlyInnleid = row.recmanCandidate?.isContractor === true;
+    // Eksplisitt target: aktiv innleid → KANDIDAT, ellers reaktiver som INNLEID.
+    const target = isCurrentlyInnleid ? "KANDIDAT" : "INNLEID";
     try {
-      const result = await toggleContractorWithHistory(candidateId);
+      const result = await transitionPersonnelCategory(
+        { recmanCandidateId: row.recmanCandidateId },
+        target
+      );
       if (!result.success)
         console.error("[NRT] toggle contractor failed:", result.error);
     } catch (e) {
@@ -167,8 +145,8 @@ export function ContractorListView({
   }
 
   function getLatestPeriod(
-    periods: Contractor["contractorPeriods"]
-  ): Contractor["contractorPeriods"][0] | null {
+    periods: NonNullable<PersonnelishRow["recmanCandidate"]>["contractorPeriods"]
+  ) {
     if (!periods || periods.length === 0) return null;
     return periods[0]; // Already sorted by startDate desc from the server
   }
@@ -376,48 +354,52 @@ export function ContractorListView({
                 </tr>
               </thead>
               <tbody>
-                {contractors.map((c) => {
+                {contractors.map((row) => {
+                  const rc = row.recmanCandidate;
                   const skills =
-                    (c.skills as Array<{ name: string }>) || [];
+                    (rc?.skills as Array<{ name: string }> | null) || [];
                   const exSkills = skills.filter((s) =>
                     HIGHLIGHT_SKILL_KEYWORDS.some((kw) =>
                       s.name.toLowerCase().includes(kw)
                     )
                   );
-                  const latestPeriod = getLatestPeriod(c.contractorPeriods);
+                  const periods = rc?.contractorPeriods ?? [];
+                  const latestPeriod = getLatestPeriod(periods);
                   const isActive = latestPeriod
                     ? latestPeriod.endDate === null
                     : false;
-                  const isActingOnThis = pendingAction?.startsWith(c.id);
-                  const evalCount = c.personnel?.evaluations.length ?? 0;
+                  const isActingOnThis = pendingAction?.startsWith(row.id);
+                  const evals = row.evaluations ?? [];
+                  const evalCount = evals.length;
                   const avgScore = evalCount > 0
-                    ? Math.round(c.personnel!.evaluations.reduce((s, e) => s + e.score, 0) / evalCount * 10) / 10
+                    ? Math.round(evals.reduce((s, e) => s + e.score, 0) / evalCount * 10) / 10
                     : null;
+                  const isContractorFlag = rc?.isContractor ?? false;
 
                   return (
                     <tr
-                      key={c.id}
+                      key={row.id}
                       className={`border-b last:border-0 hover:bg-muted/30 transition-colors ${isActingOnThis ? "opacity-60" : ""}`}
                     >
                       <td className="px-4 py-3">
                         <button
-                          onClick={() => openDetail(c.id)}
+                          onClick={() => rc && openDetail(rc.id)}
                           className="font-medium text-primary hover:underline text-left"
-                          disabled={isLoadingDetail}
+                          disabled={isLoadingDetail || !rc}
                         >
-                          {c.firstName} {c.lastName}
+                          {row.name}
                         </button>
-                        {c.email && (
+                        {row.email && (
                           <div className="text-xs text-muted-foreground">
-                            {c.email}
+                            {row.email}
                           </div>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {c.title || "\u2014"}
+                        {rc?.title || "—"}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {c.city || "\u2014"}
+                        {rc?.city || "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {isActive ? (
@@ -438,17 +420,17 @@ export function ContractorListView({
                         {latestPeriod ? (
                           <span>
                             {formatDate(latestPeriod.startDate)}
-                            {" \u2013 "}
+                            {" – "}
                             {latestPeriod.endDate
                               ? formatDate(latestPeriod.endDate)
-                              : "P\u00e5g\u00e5ende"}
+                              : "Pågående"}
                           </span>
                         ) : (
-                          "\u2014"
+                          "—"
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm">
-                        {latestPeriod?.company || "\u2014"}
+                        {latestPeriod?.company || "—"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
@@ -474,41 +456,43 @@ export function ContractorListView({
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center text-sm tabular-nums">
-                        {evalCount > 0 ? evalCount : "\u2014"}
+                        {evalCount > 0 ? evalCount : "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {avgScore !== null ? (
                           <ScoreBadge score={avgScore} />
                         ) : (
-                          <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+                          <span className="text-sm text-muted-foreground">{"—"}</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1">
-                          <Tooltip>
-                            <TooltipTrigger
-                              render={
-                                <Button
-                                  variant={
-                                    c.isContractor ? "default" : "outline"
-                                  }
-                                  size="icon"
-                                  className={`h-7 w-7 ${c.isContractor ? "bg-blue-600 hover:bg-blue-700" : ""}`}
-                                  onClick={() =>
-                                    handleToggleContractor(c.id)
-                                  }
-                                  disabled={!!pendingAction}
-                                />
-                              }
-                            >
-                              <HardHat className="h-3.5 w-3.5" />
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              {c.isContractor
-                                ? "Deaktiver innleid-status"
-                                : "Reaktiver som innleid"}
-                            </TooltipContent>
-                          </Tooltip>
+                          {rc && (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Button
+                                    variant={
+                                      isContractorFlag ? "default" : "outline"
+                                    }
+                                    size="icon"
+                                    className={`h-7 w-7 ${isContractorFlag ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+                                    onClick={() =>
+                                      handleToggleContractor(row)
+                                    }
+                                    disabled={!!pendingAction}
+                                  />
+                                }
+                              >
+                                <HardHat className="h-3.5 w-3.5" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {isContractorFlag
+                                  ? "Deaktiver innleid-status"
+                                  : "Reaktiver som innleid"}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -522,8 +506,8 @@ export function ContractorListView({
                     >
                       Ingen innleide funnet.{" "}
                       {total === 0
-                        ? "Merk kandidater som innleid for \u00e5 se dem her."
-                        : "Pr\u00f8v andre filtre."}
+                        ? "Merk kandidater som innleid for å se dem her."
+                        : "Prøv andre filtre."}
                     </td>
                   </tr>
                 )}

@@ -1,7 +1,5 @@
-import {
-  searchContractors,
-  getContractorStats,
-} from "@/app/(authenticated)/personell/innleide/actions";
+import { getPersonnelishList } from "@/lib/queries/personnel-list";
+import { getContractorStats } from "@/app/(authenticated)/personell/innleide/actions";
 import {
   Card,
   CardContent,
@@ -24,13 +22,31 @@ interface PageProps {
   }>;
 }
 
+const PAGE_SIZE = 50;
+
 export default async function InnleidePage({ searchParams }: PageProps) {
   const params = await searchParams;
+  const page = Math.max(1, parseInt(params.page || "1", 10));
 
-  const [result, stats] = await Promise.all([
-    searchContractors(params),
+  const [allRows, stats] = await Promise.all([
+    getPersonnelishList({
+      category: "INNLEID",
+      search: params.q,
+      skill: params.skill,
+      city: params.city,
+      company: params.company,
+      minRating: params.minRating ? parseInt(params.minRating, 10) : undefined,
+      license: params.license,
+      language: params.language,
+    }),
     getContractorStats(),
   ]);
+
+  const total = allRows.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const contractors = allRows.slice(start, start + PAGE_SIZE);
 
   return (
     <div className="space-y-6">
@@ -118,10 +134,10 @@ export default async function InnleidePage({ searchParams }: PageProps) {
 
       {/* Innleid-liste */}
       <ContractorListView
-        contractors={result.contractors}
-        total={result.total}
-        totalPages={result.totalPages}
-        currentPage={result.currentPage}
+        contractors={contractors}
+        total={total}
+        totalPages={totalPages}
+        currentPage={currentPage}
         filters={params}
       />
     </div>

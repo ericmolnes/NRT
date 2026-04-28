@@ -1,10 +1,8 @@
 "use server";
 
 import { db } from "@/lib/db";
-import { revalidatePath } from "next/cache";
 import { type Prisma } from "@/generated/prisma/client";
 import { SKILL_CATEGORIES } from "@/lib/recman/types";
-import { transitionCategory } from "@/lib/personell/transition-category";
 
 // ─── Søk innleide ───────────────────────────────────────────────────
 
@@ -183,52 +181,6 @@ export async function getContractorStats() {
   return { total, active, former, withSkills, withEvaluations };
 }
 
-// ─── Toggle innleid med periodehistorikk ────────────────────────────
-//
-// Bakoverkompatibel shim. Hele overgangslogikken — periode, isContractor,
-// Personnel-rad og ChangeLog — bor nå i `transitionCategory`. Denne
-// wrapperen beholdes for å unngå å bryte alle eksisterende UI-kall i samme
-// commit.
-
-export async function toggleContractorWithHistory(candidateId: string) {
-  const candidate = await db.recmanCandidate.findUnique({
-    where: { id: candidateId },
-    select: { isContractor: true, contractorPeriods: { where: { endDate: null }, take: 1 } },
-  });
-  if (!candidate)
-    return { success: false as const, error: "Kandidat ikke funnet" };
-
-  const isCurrentlyContractor =
-    candidate.isContractor || candidate.contractorPeriods.length > 0;
-  const target = isCurrentlyContractor ? "KANDIDAT" : "INNLEID";
-
-  const result = await transitionCategory({ recmanCandidateId: candidateId }, target);
-  if (!result.success) {
-    return { success: false as const, error: result.error };
-  }
-
-  revalidatePath("/personell/innleide");
-  revalidatePath("/personell/kandidater");
-  revalidatePath("/personell");
-
-  return {
-    success: true as const,
-    isContractor: target === "INNLEID",
-  };
-}
-
-// ─── Fjern innleid-status helt ──────────────────────────────────────
-//
-// Bakoverkompatibel shim — delegerer til `transitionCategory`. Lukker åpne
-// perioder og fjerner `isContractor` flagget i én transaksjon med
-// endringslogg.
-
-export async function removeContractorStatus(candidateId: string) {
-  const result = await transitionCategory({ recmanCandidateId: candidateId }, "KANDIDAT");
-  if (!result.success) return { success: false as const, error: result.error };
-
-  revalidatePath("/personell/innleide");
-  revalidatePath("/personell/kandidater");
-  revalidatePath("/personell");
-  return { success: true as const };
-}
+// Kategoriovergang gjøres nå via `transitionPersonnelCategory` i
+// `personell/actions.ts` — kalleren spesifiserer eksplisitt target-kategori
+// ("INNLEID" eller "KANDIDAT") i stedet for å gå via en toggle-shim.
