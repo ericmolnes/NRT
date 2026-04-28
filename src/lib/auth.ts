@@ -1,8 +1,7 @@
 import NextAuth, { type NextAuthResult } from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import { authConfig } from "./auth.config";
-import { db } from "./db";
-import { resolveAccessLevel } from "./access/get-current-access";
+import { resolveAccessForSession } from "./access/get-current-access";
 
 // Vi utvider auth.config sin session-callback med et DB-oppslag som beriker
 // `session.user` med `accessLevel` og `userAccessId`. Dette gjøres her
@@ -27,37 +26,37 @@ const nextAuth: NextAuthResult = NextAuth({
         const email = finalSession.user.email ?? null;
         const groups = finalSession.user.groups ?? [];
 
-        // Slå opp UserAccess-raden. Vi kjører dette på hver session-henting
-        // for nå. Det er enkelt og korrekt — admin-godkjenning slår igjennom
-        // umiddelbart. Hvis dette blir for tungt kan vi flytte til JWT-cache
-        // og invalidasjonsmekanisme.
-        let row: { id: string; level: "MINIMUM" | "USER" | "ADMIN" } | null = null;
-        if (entraId || email) {
-          const orFilters: Array<{ entraId?: string; email?: string }> = [];
-          if (entraId) orFilters.push({ entraId });
-          if (email) orFilters.push({ email });
-          row = await db.userAccess.findFirst({
-            where: { OR: orFilters },
-            select: { id: true, level: true },
+        // Robust mot DB-utfall: hvis Neon er midlertidig nede skal ikke hele
+        // appen falle. Vi logger og degraderer til bootstrap/MINIMUM. Brukeren
+        // får eventuelt /waiting-access, men auth() returnerer fortsatt en
+        // gyldig sesjon.
+        try {
+          const access = await resolveAccessForSession({ entraId, email, groups });
+          finalSession.user.accessLevel = access.level;
+          finalSession.user.userAccessId = access.userAccessId;
+        } catch (err) {
+          console.error(
+            "[auth.session] failed to load access:",
+            err instanceof Error ? err.message : err
+          );
+          // Degradert modus: ren bootstrap-resolusjon uten DB-rad. Returnerer
+          // ADMIN hvis bruker er i bootstrap-listen, ellers MINIMUM.
+          const { resolveAccessLevel } = await import("./access/get-current-access");
+          const bootstrapEmails = (process.env.ADMIN_EMAILS ?? "")
+            .split(",")
+            .map((e) => e.trim())
+            .filter(Boolean);
+          const bootstrapGroupId = process.env.ADMIN_GROUP_ID?.trim() || null;
+          const fallback = resolveAccessLevel({
+            userAccessRow: null,
+            email,
+            groups,
+            bootstrapEmails,
+            bootstrapGroupId,
           });
+          finalSession.user.accessLevel = fallback.level;
+          finalSession.user.userAccessId = fallback.userAccessId;
         }
-
-        const bootstrapEmails = (process.env.ADMIN_EMAILS ?? "")
-          .split(",")
-          .map((e) => e.trim())
-          .filter(Boolean);
-        const bootstrapGroupId = process.env.ADMIN_GROUP_ID?.trim() || null;
-
-        const access = resolveAccessLevel({
-          userAccessRow: row,
-          email,
-          groups,
-          bootstrapEmails,
-          bootstrapGroupId,
-        });
-
-        finalSession.user.accessLevel = access.level;
-        finalSession.user.userAccessId = access.userAccessId;
       }
 
       return finalSession;

@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { isUser } from "@/lib/rbac";
+import { requireUser } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import ExcelJS from "exceljs";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Ikke autentisert" }, { status: 401 });
-  }
-  if (!(await isUser())) {
-    return NextResponse.json({ error: "Ikke autorisert" }, { status: 403 });
+  const r = await requireUser();
+  if (!r.ok) {
+    return NextResponse.json({ error: r.reason }, { status: r.status });
   }
 
   const formData = await req.formData();
