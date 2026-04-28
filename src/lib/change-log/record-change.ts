@@ -4,6 +4,17 @@
 // `ChangeLogClient`-objekt som eksponerer akkurat de operasjonene vi trenger.
 // Det lar oss enhetsteste i minne og gjenbruke samme kode fra både server
 // actions, sync-jobs og AI-assistenten.
+//
+// **Atomisitet:** All skriving (parent-loggen + entries) skjer inne i en
+// `$transaction`. Hvis `createMany` feiler etter at `changeLog.create` har
+// kjørt, ruller transaksjonen begge tilbake slik at vi aldri etterlater en
+// foreldreløs ChangeLog uten entries.
+//
+// **JSON-null-konvensjon:** Vi normaliserer `oldValue`/`newValue` med `??
+// null`, slik at både `undefined` og `null` blir lagret som DB NULL. Hvis
+// kalleren trenger å skille mellom "ikke satt" og JSON-`null`-literal, må
+// verdien pakkes inn (f.eks. `{ value: null }`) eller sendes som
+// `Prisma.JsonNull`. Se også JSDoc på `ChangeEntryInput` i types.ts.
 
 import type {
   ChangeLogClient,
@@ -46,37 +57,42 @@ export async function recordChange(
     }
   }
 
-  const log = await client.changeLog.create({
-    data: {
-      actorType: input.actorType,
-      actorId: input.actorId ?? null,
-      actorName: input.actorName ?? null,
-      source: input.source,
-      summary: input.summary ?? null,
-      runId: input.runId ?? null,
-    },
-  });
+  // Hele logginnsettelsen skjer i én transaksjon: parent-rad, child-entries
+  // og oppfølgings-findMany. Hvis en av stegene feiler, etterlater vi ikke
+  // en foreldreløs ChangeLog uten tilhørende entries.
+  return client.$transaction(async (tx) => {
+    const log = await tx.changeLog.create({
+      data: {
+        actorType: input.actorType,
+        actorId: input.actorId ?? null,
+        actorName: input.actorName ?? null,
+        source: input.source,
+        summary: input.summary ?? null,
+        runId: input.runId ?? null,
+      },
+    });
 
-  await client.changeLogEntry.createMany({
-    data: input.entries.map((entry) => ({
+    await tx.changeLogEntry.createMany({
+      data: input.entries.map((entry) => ({
+        changeLogId: log.id,
+        model: entry.model,
+        recordId: entry.recordId,
+        field: entry.field,
+        oldValue: entry.oldValue ?? null,
+        newValue: entry.newValue ?? null,
+      })),
+    });
+
+    // Hent ut id-ene til de nyopprettede entries slik at kalleren kan
+    // referere dem (f.eks. for senere rollback). Vi spør på `changeLogId`
+    // siden createMany ikke returnerer id-ene direkte.
+    const entries = await tx.changeLogEntry.findMany({
+      where: { changeLogId: log.id },
+    });
+
+    return {
       changeLogId: log.id,
-      model: entry.model,
-      recordId: entry.recordId,
-      field: entry.field,
-      oldValue: entry.oldValue ?? null,
-      newValue: entry.newValue ?? null,
-    })),
+      entryIds: entries.map((e) => e.id),
+    };
   });
-
-  // Hent ut id-ene til de nyopprettede entries slik at kalleren kan
-  // referere dem (f.eks. for senere rollback). Vi spør på `changeLogId`
-  // siden createMany ikke returnerer id-ene direkte.
-  const entries = await client.changeLogEntry.findMany({
-    where: { changeLogId: log.id },
-  });
-
-  return {
-    changeLogId: log.id,
-    entryIds: entries.map((e) => e.id),
-  };
 }

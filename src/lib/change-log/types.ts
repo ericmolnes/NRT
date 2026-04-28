@@ -15,7 +15,18 @@ export type ChangeSource =
   | "POWEROFFICE_SYNC"
   | "SYSTEM";
 
-/** En enkelt feltendring som skal logges. */
+/**
+ * En enkelt feltendring som skal logges.
+ *
+ * **JSON-null-konvensjon:** Både `oldValue: undefined` og `oldValue: null`
+ * lagres som DB NULL. Hvis kalleren må skille mellom "ikke satt" og en faktisk
+ * JSON-`null`-literal, må verdien pakkes i et objekt (f.eks. `{ value: null }`)
+ * eller sendes som `Prisma.JsonNull`. Helperen normaliserer ikke videre.
+ *
+ * **PII-ansvar:** `oldValue` og `newValue` lagres verbatim i databasen. Kalleren
+ * er ansvarlig for å redigere/maskere sensitive felter (passord, tokens,
+ * lønn osv.) før de logges. Foundation-laget gjør ingen automatisk redaksjon.
+ */
 export type ChangeEntryInput = {
   model: string;
   recordId: string;
@@ -24,7 +35,14 @@ export type ChangeEntryInput = {
   newValue: unknown;
 };
 
-/** Inputtet til `recordChange` — én logisk gruppe med én eller flere endringer. */
+/**
+ * Inputtet til `recordChange` — én logisk gruppe med én eller flere endringer.
+ *
+ * **Viktig om PII:** Verdiene i `entries[].oldValue` og `entries[].newValue`
+ * persisteres som JSON i databasen uten filtrering. Kalleren er ansvarlig
+ * for å redigere ut sensitiv informasjon (passordhasher, API-tokens,
+ * lønnsdata o.l.) før de sendes hit. Det finnes ingen redact-hook ennå.
+ */
 export type RecordChangeInput = {
   actorType: ChangeActorType;
   actorId?: string | null;
@@ -132,8 +150,22 @@ export type MarkEntryRolledBackArgs = {
  *
  * Returner `true` hvis verdien ble skrevet tilbake, `false` hvis modellen
  * er ukjent og rollback skal hoppes over for denne posten.
+ *
+ * **Konkurransekontrakt:** Applieren MÅ verifisere at den nåværende verdien
+ * i databasen matcher `entry.newValue` før den skriver tilbake `entry.oldValue`.
+ * Hvis en samtidig skriving har endret feltet etter at endringsloggen ble
+ * registrert, vil en uvettig rollback stille klobbe den nye verdien. Bruk en
+ * compare-and-swap eller eksplisitt sjekk inne i `tx`. Foundation-laget kan
+ * ikke gjøre dette på vegne av kalleren fordi det ikke kjenner modellen.
+ *
+ * Den andre parameteren `tx` er en transaksjonell `ChangeLogClient` —
+ * applieren skal bruke `tx` (ikke en frittstående Prisma-klient) slik at
+ * skrivinger og selve `rolledBackAt`-markeringen utgjør én atomisk enhet.
  */
-export type RollbackApplier = (entry: ChangeLogEntryRow) => Promise<boolean> | boolean;
+export type RollbackApplier = (
+  entry: ChangeLogEntryRow,
+  tx: ChangeLogClient
+) => Promise<boolean> | boolean;
 
 export interface ChangeLogClient {
   changeLog: {
@@ -144,4 +176,11 @@ export interface ChangeLogClient {
     findMany(args: FindEntriesArgs): Promise<ChangeLogEntryRow[]>;
     update(args: MarkEntryRolledBackArgs): Promise<ChangeLogEntryRow>;
   };
+  /**
+   * Kjør en transaksjonsblokk. Implementasjonen skal sende en transaksjonell
+   * klient (samme `ChangeLogClient`-form, men bundet til transaksjonen) inn
+   * i callbacken. Hvis callbacken kaster, skal hele transaksjonen rulles
+   * tilbake — inkludert eventuelle skrivinger applieren gjorde gjennom `tx`.
+   */
+  $transaction<T>(fn: (tx: ChangeLogClient) => Promise<T>): Promise<T>;
 }

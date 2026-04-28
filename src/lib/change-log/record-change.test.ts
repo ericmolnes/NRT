@@ -21,7 +21,15 @@ type StubState = {
   createManyCalls: CreateChangeLogEntriesArgs[];
 };
 
-function createStub(): { client: ChangeLogClient; state: StubState } {
+type StubOptions = {
+  /** Hvis satt, kaster `createMany` med denne feilen. Brukes til atomisitetstest. */
+  createManyThrows?: Error;
+};
+
+function createStub(options: StubOptions = {}): {
+  client: ChangeLogClient;
+  state: StubState;
+} {
   const state: StubState = {
     logs: [],
     entries: [],
@@ -31,6 +39,11 @@ function createStub(): { client: ChangeLogClient; state: StubState } {
     createManyCalls: [],
   };
 
+  // Vi bygger en transaksjonell stub som etterligner Prismas
+  // `$transaction(fn)`-API: callbacken får en klient bundet til transaksjonen,
+  // og hvis den kaster ruller vi tilbake alle skrivinger som ble gjort.
+  // Implementasjonen tar et øyeblikksbilde før callbacken kjører og
+  // restaurerer det hvis vi feiler.
   const client: ChangeLogClient = {
     changeLog: {
       async create(args) {
@@ -51,6 +64,12 @@ function createStub(): { client: ChangeLogClient; state: StubState } {
     },
     changeLogEntry: {
       async createMany(args) {
+        if (options.createManyThrows) {
+          // Vi registrerer kallet før vi kaster, så testen kan verifisere at
+          // det faktisk ble forsøkt.
+          state.createManyCalls.push(args);
+          throw options.createManyThrows;
+        }
         state.createManyCalls.push(args);
         for (const entry of args.data) {
           state.entries.push({
@@ -85,6 +104,28 @@ function createStub(): { client: ChangeLogClient; state: StubState } {
       async update() {
         throw new Error("not used in record-change tests");
       },
+    },
+    async $transaction<T>(fn: (tx: ChangeLogClient) => Promise<T>): Promise<T> {
+      // Snapshot før transaksjonen — vi gjenoppretter ved feil. I produksjon
+      // vil Prisma håndtere dette via SQL-transaksjonen; i stuben emulerer
+      // vi semantikken slik at testene faktisk kan demonstrere atomisitet.
+      const snapshot = {
+        logs: state.logs.map((l) => ({ ...l })),
+        entries: state.entries.map((e) => ({ ...e })),
+        nextLogId: state.nextLogId,
+        nextEntryId: state.nextEntryId,
+      };
+      try {
+        return await fn(client);
+      } catch (err) {
+        state.logs.length = 0;
+        state.logs.push(...snapshot.logs);
+        state.entries.length = 0;
+        state.entries.push(...snapshot.entries);
+        state.nextLogId = snapshot.nextLogId;
+        state.nextEntryId = snapshot.nextEntryId;
+        throw err;
+      }
     },
   };
 
@@ -243,4 +284,33 @@ test("recordChange normaliserer udefinerte felter til null", async () => {
   assert.equal(state.logs[0].actorName, null);
   assert.equal(state.logs[0].summary, null);
   assert.equal(state.logs[0].runId, null);
+});
+
+test("recordChange ruller tilbake hele logginnsettelsen hvis createMany feiler", async () => {
+  // Reproduserer C1: hvis createMany kaster etter at parent-loggen er
+  // opprettet, skal transaksjonen rulle tilbake parent-loggen også. Uten
+  // $transaction ville vi etterlatt en foreldreløs ChangeLog-rad.
+  const failure = new Error("createMany feilet (simulert DB-feil)");
+  const { client, state } = createStub({ createManyThrows: failure });
+
+  await assert.rejects(
+    () =>
+      recordChange(client, {
+        actorType: "USER",
+        actorId: "user_1",
+        source: "USER_ACTION",
+        summary: "Skal feile",
+        entries: [
+          { model: "Personnel", recordId: "p1", field: "email", oldValue: "a", newValue: "b" },
+        ],
+      }),
+    /createMany feilet/
+  );
+
+  // createMany skal ha blitt forsøkt (én gang), men ingenting skal være
+  // persistert: verken parent-loggen eller entries.
+  assert.equal(state.createCalls.length, 1, "changeLog.create skal ha blitt kalt");
+  assert.equal(state.createManyCalls.length, 1, "createMany skal ha blitt forsøkt");
+  assert.equal(state.logs.length, 0, "ingen ChangeLog-rader skal være persistert");
+  assert.equal(state.entries.length, 0, "ingen entries skal være persistert");
 });

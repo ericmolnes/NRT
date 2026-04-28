@@ -63,6 +63,25 @@ function createStub(
         return entry;
       },
     },
+    async $transaction<T>(fn: (tx: ChangeLogClient) => Promise<T>): Promise<T> {
+      // Stuben emulerer Prisma sin transaksjons-semantikk: vi snapshotter
+      // mutérbar tilstand før callbacken kjører, og gjenoppretter den hvis
+      // callbacken kaster. Dette lar testene faktisk verifisere at
+      // rollback-løkken er atomisk.
+      const snapshot = {
+        logs: state.logs.map((l) => ({ ...l })),
+        entries: state.entries.map((e) => ({ ...e })),
+      };
+      try {
+        return await fn(client);
+      } catch (err) {
+        state.logs.length = 0;
+        state.logs.push(...snapshot.logs);
+        state.entries.length = 0;
+        state.entries.push(...snapshot.entries);
+        throw err;
+      }
+    },
   };
 
   return { client, state };
@@ -102,7 +121,7 @@ test("rollbackChange ruller tilbake en enkelt feltendring", async () => {
   const { client, state } = createStub([entry]);
 
   const applied: Array<{ model: string; recordId: string; field: string; value: unknown }> = [];
-  const applier: RollbackApplier = async (e) => {
+  const applier: RollbackApplier = async (e, _tx) => {
     applied.push({ model: e.model, recordId: e.recordId, field: e.field, value: e.oldValue });
     return true;
   };
@@ -128,7 +147,7 @@ test("rollbackChange ruller tilbake alle entries i en gruppe via changeLogId", a
   const { client, state } = createStub(entries);
 
   const applied: string[] = [];
-  const applier: RollbackApplier = async (e) => {
+  const applier: RollbackApplier = async (e, _tx) => {
     applied.push(e.id);
     return true;
   };
@@ -160,7 +179,7 @@ test("rollbackChange ruller tilbake alle entries på tvers av flere logger via r
   const { client, state } = createStub(entries, logs);
 
   const applied: string[] = [];
-  const applier: RollbackApplier = async (e) => {
+  const applier: RollbackApplier = async (e, _tx) => {
     applied.push(e.id);
     return true;
   };
@@ -192,7 +211,7 @@ test("rollbackChange hopper over allerede tilbakerullede entries", async () => {
   const { client } = createStub([alreadyRolled, fresh]);
 
   const applied: string[] = [];
-  const applier: RollbackApplier = async (e) => {
+  const applier: RollbackApplier = async (e, _tx) => {
     applied.push(e.id);
     return true;
   };
@@ -211,7 +230,7 @@ test("rollbackChange teller ikke entries der applier returnerer false", async ()
   ];
   const { client, state } = createStub(entries);
 
-  const applier: RollbackApplier = (e) => e.model === "KnownModel";
+  const applier: RollbackApplier = (e, _tx) => e.model === "KnownModel";
 
   const result = await rollbackChange(client, { changeLogId: "log_1" }, applier);
 
@@ -250,7 +269,7 @@ test("rollbackChange propagerer feil fra applier", async () => {
   const entry = makeEntry({ id: "e1" });
   const { client, state } = createStub([entry]);
 
-  const applier: RollbackApplier = () => {
+  const applier: RollbackApplier = (_e, _tx) => {
     throw new Error("databasefeil");
   };
 
@@ -261,4 +280,46 @@ test("rollbackChange propagerer feil fra applier", async () => {
 
   // Entry skal ikke være markert som rullet tilbake hvis applier feilet
   assert.equal(state.entries[0].rolledBackAt, null);
+});
+
+test("rollbackChange markerer ingen entries hvis applier feiler i transaksjonen", async () => {
+  // Reproduserer I1: applieren lykkes for de første entries, men feiler
+  // halvveis. Hele transaksjonen skal rulle tilbake — ingen av entries
+  // skal være markert som rullet tilbake, selv om applier returnerte true
+  // for de tidligere.
+  const entries = [
+    makeEntry({ id: "e1", changeLogId: "log_1", field: "email" }),
+    makeEntry({ id: "e2", changeLogId: "log_1", field: "phone" }),
+    makeEntry({ id: "e3", changeLogId: "log_1", field: "name" }),
+  ];
+  const { client, state } = createStub(entries);
+
+  const appliedIds: string[] = [];
+  const applier: RollbackApplier = (e, _tx) => {
+    appliedIds.push(e.id);
+    if (e.id === "e2") {
+      throw new Error("simulert feil på e2");
+    }
+    return true;
+  };
+
+  await assert.rejects(
+    () => rollbackChange(client, { changeLogId: "log_1" }, applier),
+    /simulert feil på e2/
+  );
+
+  // Applieren ble forsøkt på e1 og e2 (ikke e3 — vi rakk ikke dit).
+  assert.deepEqual(appliedIds, ["e1", "e2"]);
+
+  // Selv om applier returnerte true for e1 (og update ble kalt for e1
+  // før e2 feilet), skal transaksjonen ha rullet tilbake markeringen,
+  // slik at ingen entries har rolledBackAt satt.
+  for (const id of ["e1", "e2", "e3"]) {
+    const entry = state.entries.find((e) => e.id === id)!;
+    assert.equal(
+      entry.rolledBackAt,
+      null,
+      `${id} skal ikke være markert som rullet tilbake etter transaksjonsrollback`
+    );
+  }
 });
