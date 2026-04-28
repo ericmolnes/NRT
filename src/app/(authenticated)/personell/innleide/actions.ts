@@ -1,10 +1,10 @@
 "use server";
 
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { type Prisma } from "@/generated/prisma/client";
 import { SKILL_CATEGORIES } from "@/lib/recman/types";
+import { transitionCategory } from "@/lib/personell/transition-category";
 
 // ─── Søk innleide ───────────────────────────────────────────────────
 
@@ -184,165 +184,48 @@ export async function getContractorStats() {
 }
 
 // ─── Toggle innleid med periodehistorikk ────────────────────────────
+//
+// Bakoverkompatibel shim. Hele overgangslogikken — periode, isContractor,
+// Personnel-rad og ChangeLog — bor nå i `transitionCategory`. Denne
+// wrapperen beholdes for å unngå å bryte alle eksisterende UI-kall i samme
+// commit.
 
 export async function toggleContractorWithHistory(candidateId: string) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Ikke autentisert");
-
   const candidate = await db.recmanCandidate.findUnique({
     where: { id: candidateId },
-    select: {
-      isContractor: true,
-      isEmployee: true,
-      employeeEnd: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      personnelId: true,
-      contractorPeriods: {
-        where: { endDate: null },
-        orderBy: { startDate: "desc" },
-        take: 1,
-      },
-    },
+    select: { isContractor: true, contractorPeriods: { where: { endDate: null }, take: 1 } },
   });
   if (!candidate)
     return { success: false as const, error: "Kandidat ikke funnet" };
 
-  const isCurrentEmployee =
-    candidate.isEmployee && candidate.employeeEnd === null;
+  const isCurrentlyContractor =
+    candidate.isContractor || candidate.contractorPeriods.length > 0;
+  const target = isCurrentlyContractor ? "KANDIDAT" : "INNLEID";
 
-  if (candidate.isContractor) {
-    // ─── Deaktiver: lukk aktiv periode, sett isContractor=false ────
-    await db.$transaction(async (tx) => {
-      // Close active period
-      if (candidate.contractorPeriods.length > 0) {
-        await tx.contractorPeriod.update({
-          where: { id: candidate.contractorPeriods[0].id },
-          data: { endDate: new Date() },
-        });
-      }
-
-      // Set isContractor=false
-      await tx.recmanCandidate.update({
-        where: { id: candidateId },
-        data: { isContractor: false },
-      });
-
-      // Keep ACTIVE if they're still an internal employee loaned out briefly.
-      if (candidate.personnelId && !isCurrentEmployee) {
-        await tx.personnel.update({
-          where: { id: candidate.personnelId },
-          data: { status: "INACTIVE" },
-        });
-      } else if (candidate.personnelId && isCurrentEmployee) {
-        await tx.personnel.update({
-          where: { id: candidate.personnelId },
-          data: { role: "Ansatt" },
-        });
-      }
-    });
-
-    console.log(
-      `[NRT] deactivated contractor ${candidateId} (${candidate.firstName} ${candidate.lastName})`
-    );
-  } else {
-    // ─── Aktiver: opprett ny periode, sett isContractor=true ───────
-    await db.$transaction(async (tx) => {
-      // Guard: skip if already has an active period (prevents double-click duplicates)
-      const existingActive = await tx.contractorPeriod.findFirst({
-        where: { recmanCandidateId: candidateId, endDate: null },
-      });
-      if (!existingActive) {
-        await tx.contractorPeriod.create({
-          data: {
-            recmanCandidateId: candidateId,
-            startDate: new Date(),
-            company: null,
-          },
-        });
-      }
-
-      // Set isContractor=true
-      await tx.recmanCandidate.update({
-        where: { id: candidateId },
-        data: { isContractor: true },
-      });
-
-      // Find or create Personnel with role="Innleid"
-      if (candidate.personnelId) {
-        // Already linked — reactivate
-        await tx.personnel.update({
-          where: { id: candidate.personnelId },
-          data: { status: "ACTIVE", role: "Innleid" },
-        });
-      } else {
-        // Create new Personnel record
-        const personnel = await tx.personnel.create({
-          data: {
-            name: `${candidate.firstName} ${candidate.lastName}`,
-            email: candidate.email,
-            role: "Innleid",
-            status: "ACTIVE",
-          },
-        });
-
-        // Link candidate to personnel
-        await tx.recmanCandidate.update({
-          where: { id: candidateId },
-          data: { personnelId: personnel.id },
-        });
-      }
-    });
-
-    console.log(
-      `[NRT] activated contractor ${candidateId} (${candidate.firstName} ${candidate.lastName})`
-    );
+  const result = await transitionCategory({ recmanCandidateId: candidateId }, target);
+  if (!result.success) {
+    return { success: false as const, error: result.error };
   }
 
   revalidatePath("/personell/innleide");
   revalidatePath("/personell/kandidater");
   revalidatePath("/personell");
+
   return {
     success: true as const,
-    isContractor: !candidate.isContractor,
+    isContractor: target === "INNLEID",
   };
 }
 
 // ─── Fjern innleid-status helt ──────────────────────────────────────
+//
+// Bakoverkompatibel shim — delegerer til `transitionCategory`. Lukker åpne
+// perioder og fjerner `isContractor` flagget i én transaksjon med
+// endringslogg.
 
 export async function removeContractorStatus(candidateId: string) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Ikke autentisert");
-
-  const candidate = await db.recmanCandidate.findUnique({
-    where: { id: candidateId },
-    select: {
-      contractorPeriods: {
-        where: { endDate: null },
-      },
-    },
-  });
-  if (!candidate)
-    return { success: false as const, error: "Kandidat ikke funnet" };
-
-  await db.$transaction(async (tx) => {
-    // Close all active periods
-    for (const period of candidate.contractorPeriods) {
-      await tx.contractorPeriod.update({
-        where: { id: period.id },
-        data: { endDate: new Date() },
-      });
-    }
-
-    // Set isContractor=false
-    await tx.recmanCandidate.update({
-      where: { id: candidateId },
-      data: { isContractor: false },
-    });
-  });
-
-  console.log(`[NRT] removed contractor status for ${candidateId}`);
+  const result = await transitionCategory({ recmanCandidateId: candidateId }, "KANDIDAT");
+  if (!result.success) return { success: false as const, error: result.error };
 
   revalidatePath("/personell/innleide");
   revalidatePath("/personell/kandidater");

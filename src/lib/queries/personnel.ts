@@ -1,37 +1,80 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 import { getCorporations } from "@/lib/recman/client";
+import { buildCategoryWhere, type PersonnelCategory } from "@/lib/personell/category";
 
 interface PersonnelFilters {
   search?: string;
   department?: string;
   status?: string;
   syncStatus?: string;
+  /**
+   * Filtrer på utledet kategori (ANSATT/INNLEID/KANDIDAT). Kombineres
+   * kompositorisk med øvrige filtre slik at f.eks. `?department=X&category=ANSATT`
+   * begge gjelder samtidig.
+   */
+  category?: PersonnelCategory;
 }
 
 export async function getPersonnelList(filters?: PersonnelFilters) {
-  const where: Prisma.PersonnelWhereInput = {};
+  // Vi bygger top-level AND-listen kompositorisk slik at flere filtre kan
+  // kombineres uten at ett overskriver et annet (regresjonsbug fra tidligere).
+  const ANDs: Prisma.PersonnelWhereInput[] = [];
 
   if (filters?.search) {
-    where.name = { contains: filters.search, mode: "insensitive" };
+    ANDs.push({ name: { contains: filters.search, mode: "insensitive" } });
   }
+
+  // RecmanCandidate-relaterte filtre samles i én relation-where slik at
+  // de kan kombineres atomisk (department + syncStatus + category).
+  const recmanFilter: Prisma.RecmanCandidateWhereInput = {};
+  let requireRecmanRelation = false;
+  let requireUnlinked = false;
+
   if (filters?.department) {
-    where.recmanCandidate = { corporationId: filters.department };
+    recmanFilter.corporationId = filters.department;
+    requireRecmanRelation = true; // department gir bare mening når relasjonen finnes.
   }
+
+  if (filters?.syncStatus === "po") {
+    ANDs.push({ poEmployee: { isNot: null } });
+  } else if (filters?.syncStatus === "recman") {
+    requireRecmanRelation = true;
+  } else if (filters?.syncStatus === "unlinked") {
+    ANDs.push({ poEmployee: { is: null } });
+    requireUnlinked = true;
+  }
+
+  // Kategorifilter har høyest spesifisitet for RecmanCandidate-relasjonen.
+  // Manuelt INNLEID dekker også Personnel uten RecmanCandidate, så vi lar
+  // helper-funksjonen returnere et fragment som kan AND-es inn direkte.
+  if (filters?.category) {
+    if (requireUnlinked && filters.category !== "INNLEID") {
+      // Logisk umulig kombinasjon — unlinked betyr ingen relasjon, men
+      // ANSATT/KANDIDAT krever en. Returnér tom liste.
+      ANDs.push({ id: "__never__" });
+    } else if (requireUnlinked) {
+      // unlinked + INNLEID: behold unlinked som er. Manuell innleid er
+      // allerede dekket.
+    } else {
+      ANDs.push(buildCategoryWhere(filters.category));
+    }
+  }
+
+  // Sett sammen recman-relasjonsfilteret hvis vi har samlet noe der.
+  if (requireUnlinked) {
+    ANDs.push({ recmanCandidate: { is: null } });
+  } else if (Object.keys(recmanFilter).length > 0 || requireRecmanRelation) {
+    ANDs.push({ recmanCandidate: { is: recmanFilter } });
+  }
+
+  const where: Prisma.PersonnelWhereInput = {};
+  if (ANDs.length > 0) where.AND = ANDs;
+
   if (filters?.status) {
     where.status = filters.status as Prisma.EnumPersonnelStatusFilter;
   } else {
     where.status = "ACTIVE";
-  }
-
-  // Sync status filter
-  if (filters?.syncStatus === "po") {
-    where.poEmployee = { isNot: null };
-  } else if (filters?.syncStatus === "recman") {
-    where.recmanCandidate = { isNot: null };
-  } else if (filters?.syncStatus === "unlinked") {
-    where.poEmployee = { is: null };
-    where.recmanCandidate = { is: null };
   }
 
   return db.personnel.findMany({
@@ -52,7 +95,20 @@ export async function getPersonnelList(filters?: PersonnelFilters) {
         select: { id: true, lastSyncedAt: true, isActive: true, department: true },
       },
       recmanCandidate: {
-        select: { id: true, lastSyncedAt: true, isEmployee: true, title: true, imageUrl: true },
+        select: {
+          id: true,
+          lastSyncedAt: true,
+          isEmployee: true,
+          employeeEnd: true,
+          isContractor: true,
+          title: true,
+          imageUrl: true,
+          contractorPeriods: {
+            where: { endDate: null },
+            select: { id: true, startDate: true, endDate: true, company: true },
+            take: 1,
+          },
+        },
       },
     },
     orderBy: { name: "asc" },
@@ -75,7 +131,11 @@ export async function getPersonnelById(id: string) {
         },
       },
       poEmployee: true,
-      recmanCandidate: true,
+      recmanCandidate: {
+        include: {
+          contractorPeriods: { orderBy: { startDate: "desc" } },
+        },
+      },
     },
   });
 }

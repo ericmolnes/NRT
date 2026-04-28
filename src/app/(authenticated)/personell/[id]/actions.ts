@@ -13,35 +13,12 @@ import {
   createFieldDefinitionSchema,
   updateFieldDefinitionSchema,
 } from "@/lib/validations/custom-fields";
+import {
+  getDynamicFieldValue,
+  shouldPersistDynamicFieldValue,
+  validateDynamicFieldValue,
+} from "@/lib/forms/dynamic-fields";
 import { revalidatePath } from "next/cache";
-
-function validateFieldType(
-  value: string,
-  type: string,
-  fieldName: string,
-  options: string | null
-): string | null {
-  switch (type) {
-    case "NUMBER":
-      if (isNaN(Number(value))) return `${fieldName} må være et tall`;
-      break;
-    case "DATE":
-      if (isNaN(Date.parse(value))) return `${fieldName} må være en gyldig dato`;
-      break;
-    case "SELECT":
-      if (options) {
-        const allowed = options.split(",").map((o) => o.trim());
-        if (!allowed.includes(value))
-          return `${fieldName} har en ugyldig verdi`;
-      }
-      break;
-    case "BOOLEAN":
-      if (value !== "true" && value !== "false")
-        return `${fieldName} må være true eller false`;
-      break;
-  }
-  return null;
-}
 
 export type ActionState = {
   errors?: Record<string, string[] | undefined>;
@@ -178,20 +155,23 @@ export async function saveFieldValues(
   const fieldDefMap = new Map(fieldDefs.map((f) => [f.id, f]));
 
   for (const { fieldId, value } of parsed.data.values) {
-    if (value) {
-      // Validate value against field type
-      const fieldDef = fieldDefMap.get(fieldId);
-      if (fieldDef) {
-        const typeError = validateFieldType(value, fieldDef.type, fieldDef.name, fieldDef.options);
-        if (typeError) {
-          return { errors: { [fieldId]: [typeError] } };
-        }
-      }
+    const fieldDef = fieldDefMap.get(fieldId);
+    const normalizedValue = fieldDef
+      ? getDynamicFieldValue(formData, fieldDef)
+      : value;
 
+    if (fieldDef) {
+      const typeError = validateDynamicFieldValue(fieldDef, normalizedValue);
+      if (typeError) {
+        return { errors: { [fieldId]: [typeError] } };
+      }
+    }
+
+    if (!fieldDef || shouldPersistDynamicFieldValue(fieldDef, normalizedValue)) {
       await db.fieldValue.upsert({
         where: { personnelId_fieldId: { personnelId, fieldId } },
-        create: { personnelId, fieldId, value },
-        update: { value },
+        create: { personnelId, fieldId, value: normalizedValue },
+        update: { value: normalizedValue },
       });
     } else {
       await db.fieldValue.deleteMany({

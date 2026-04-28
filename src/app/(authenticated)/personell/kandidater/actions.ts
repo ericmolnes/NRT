@@ -9,6 +9,8 @@ import {
   candidateUpdateSchema,
   candidateAttributeSchema,
 } from "@/lib/validations/candidate";
+import { buildLocalCandidateCreateData } from "@/lib/personell/candidate-data";
+import { transitionCategory } from "@/lib/personell/transition-category";
 import { revalidatePath } from "next/cache";
 
 const CORPORATION_ID = () => process.env.RECMAN_CORPORATION_ID || "2484";
@@ -131,31 +133,11 @@ export async function createCandidate(formData: FormData) {
 
   // Create local record
   const candidate = await db.recmanCandidate.create({
-    data: {
+    data: buildLocalCandidateCreateData({
       recmanId: String(newRecmanId),
-      firstName: verified?.firstName || parsed.data.firstName,
-      lastName: verified?.lastName || parsed.data.lastName,
-      email: verified?.email || parsed.data.email || null,
-      phone: parsed.data.phone || parsed.data.mobilePhone || null,
-      title: verified?.title || parsed.data.title || null,
-      city: verified?.city || parsed.data.city || null,
-      country: parsed.data.country || null,
-      nationality: parsed.data.nationality || null,
-      gender: parsed.data.gender || null,
-      dob: parsed.data.dob ? new Date(parsed.data.dob) : null,
-      description: parsed.data.description || null,
-      rating: parsed.data.rating || 0,
-      isEmployee: false,
-      skills: [],
-      education: [],
-      experience: [],
-      courses: [],
-      languages: [],
-      references: [],
-      attributes: [],
-      driversLicense: [],
-      lastSyncedAt: new Date(),
-    },
+      input: parsed.data,
+      verified,
+    }),
   });
 
   console.log(`[RecMan write-back] created candidate ${newRecmanId} → local ${candidate.id}`);
@@ -204,27 +186,28 @@ export async function updateCandidateAttributes(
 }
 
 // ─── Toggle innleid-status ─────────────────────────────────────────
+//
+// Bakoverkompatibel shim. Selve overgangen gjøres i `transitionCategory`
+// (se `src/lib/personell/transition-category.ts`) som håndterer
+// ContractorPeriod-historikk og endringslogg på samme sted.
 
 export async function toggleContractor(candidateId: string) {
-  const session = await auth();
-  if (!session?.user?.id) throw new Error("Ikke autentisert");
-
   const candidate = await db.recmanCandidate.findUnique({
     where: { id: candidateId },
-    select: { isContractor: true },
+    select: { isContractor: true, contractorPeriods: { where: { endDate: null }, take: 1 } },
   });
   if (!candidate) return { success: false as const, error: "Kandidat ikke funnet" };
 
-  await db.recmanCandidate.update({
-    where: { id: candidateId },
-    data: { isContractor: !candidate.isContractor },
-  });
+  const isCurrentlyContractor = candidate.isContractor || candidate.contractorPeriods.length > 0;
+  const target = isCurrentlyContractor ? "KANDIDAT" : "INNLEID";
 
-  console.log(`[NRT] toggled contractor status for ${candidateId} → ${!candidate.isContractor}`);
+  const result = await transitionCategory({ recmanCandidateId: candidateId }, target);
+  if (!result.success) return { success: false as const, error: result.error };
 
   revalidatePath("/personell/kandidater");
+  revalidatePath("/personell/innleide");
   revalidatePath("/personell");
-  return { success: true as const, isContractor: !candidate.isContractor };
+  return { success: true as const, isContractor: target === "INNLEID" };
 }
 
 // ─── Fjern ansettelse (sett employeeEnd til i dag) ─────────────────

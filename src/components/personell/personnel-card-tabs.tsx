@@ -19,20 +19,18 @@ export function PersonnelCardTabs({ linkedSystems }: PersonnelCardTabsProps) {
   const activeTab = searchParams.get("tab") ?? "info";
 
   const tabs = useMemo(() => {
+    // Samme fane-struktur for ALLE kategorier (ansatt/innleid/kandidat).
+    // Recman-spesifikke detaljer (kompetanse) og synk-status vises uansett —
+    // de er bare informasjonsrike når det finnes data, men profilstrukturen
+    // skal være lik.
     const list: { id: string; label: string }[] = [
       { id: "info", label: "Oversikt" },
-    ];
-
-    if (linkedSystems.recman) {
-      list.push({ id: "kompetanse", label: "Kompetanse" });
-    }
-
-    list.push(
+      { id: "kompetanse", label: "Kompetanse" },
       { id: "evalueringer", label: "Evalueringer" },
       { id: "notater", label: "Notater" },
       { id: "felter", label: "Felter" },
       { id: "jobber", label: "Jobber & Ressurs" },
-    );
+    ];
 
     if (linkedSystems.po || linkedSystems.recman) {
       list.push({ id: "synk", label: "Synk" });

@@ -22,6 +22,7 @@ interface PageProps {
     department?: string;
     status?: string;
     sync?: string;
+    category?: "ANSATT" | "INNLEID" | "KANDIDAT";
   }>;
 }
 
@@ -34,6 +35,7 @@ export default async function PersonnelPage({ searchParams }: PageProps) {
       department: params.department,
       status: params.status,
       syncStatus: params.sync,
+      category: params.category,
     }),
     getDistinctDepartments(),
   ]);

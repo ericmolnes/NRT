@@ -1,5 +1,10 @@
 "use client";
 
+// Felles personellskjema — brukes for alle kategorier (Ansatt, Innleid,
+// Kandidat). Selve kategorien styres ikke fra dette skjemaet: Ansatt/Kandidat
+// kommer fra RecMan, og Innleid skiftes via `transitionCategory`. Skjemaet
+// holder seg rent til persondata.
+
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

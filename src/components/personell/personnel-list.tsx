@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { ScoreBadge } from "@/components/evaluering/score-badge";
+import { resolveCategory } from "@/lib/personell/category";
 import Link from "next/link";
 
 interface PersonnelWithEvals {
@@ -19,8 +20,11 @@ interface PersonnelWithEvals {
     id: string;
     lastSyncedAt: Date;
     isEmployee: boolean;
+    employeeEnd?: Date | null;
+    isContractor?: boolean;
     title?: string | null;
     imageUrl?: string | null;
+    contractorPeriods?: Array<{ id: string; startDate: Date; endDate: Date | null }>;
   } | null;
 }
 
@@ -58,6 +62,9 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
               Synk
             </th>
             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+              Kategori
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
               Snitt-score
             </th>
             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
@@ -80,6 +87,33 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
               person.department ||
               person.poEmployee?.department ||
               null;
+
+            // Avled kategori fra eksisterende felter — samme regel som i queries og UI.
+            const hasOpenPeriod =
+              (person.recmanCandidate?.contractorPeriods?.length ?? 0) > 0;
+            const category = resolveCategory({
+              recmanCandidate: person.recmanCandidate
+                ? {
+                    isEmployee: person.recmanCandidate.isEmployee,
+                    employeeEnd: person.recmanCandidate.employeeEnd ?? null,
+                    isContractor: person.recmanCandidate.isContractor ?? false,
+                  }
+                : null,
+              hasOpenContractorPeriod: hasOpenPeriod,
+              isManualPersonnel: !person.recmanCandidate,
+            });
+            const categoryLabel =
+              category === "ANSATT"
+                ? "Ansatt"
+                : category === "INNLEID"
+                  ? "Innleid"
+                  : "Kandidat";
+            const categoryClass =
+              category === "ANSATT"
+                ? "bg-emerald-100 text-emerald-700"
+                : category === "INNLEID"
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-muted text-muted-foreground";
 
             return (
               <tr
@@ -145,6 +179,14 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  <Badge
+                    variant="secondary"
+                    className={`text-[10px] px-1.5 py-0 ${categoryClass}`}
+                  >
+                    {categoryLabel}
+                  </Badge>
                 </td>
                 <td className="px-4 py-3">
                   {avgScore !== null ? (
