@@ -1359,3 +1359,242 @@ model ApiRateLimit {
   @@unique([service, date])
   @@index([service, date])
 }
+
+// ─── Foundation: tilgang, varsler, endringslogg, sync-konflikt, AI ─
+
+// Tilgangsnivå per bruker. Knyttes primært til Entra ID; e-post er sekundær
+// nøkkel for brukere som ennå ikke har logget inn.
+model UserAccess {
+  id          String          @id @default(cuid())
+  entraId     String?         @unique
+  email       String          @unique
+  displayName String?
+  level       AccessLevel     @default(MINIMUM)
+  grantedById String?
+  grantedAt   DateTime?
+  revokedAt   DateTime?
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  requests    AccessRequest[]
+
+  @@index([level])
+  @@index([entraId])
+  @@index([email])
+}
+
+// Forespørsel om oppgradering av tilgang. Opprettes av en bruker med
+// MINIMUM-tilgang og avgjøres av en ADMIN.
+model AccessRequest {
+  id            String              @id @default(cuid())
+  userAccessId  String?
+  userAccess    UserAccess?         @relation(fields: [userAccessId], references: [id], onDelete: SetNull)
+  entraId       String?
+  email         String
+  displayName   String?
+  requestedLevel AccessLevel        @default(USER)
+  reason        String?
+  status        AccessRequestStatus @default(PENDING)
+  resolvedById  String?
+  resolvedByName String?
+  resolvedAt    DateTime?
+  resolutionNote String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status])
+  @@index([userAccessId])
+  @@index([email])
+  @@index([createdAt])
+}
+
+// Intern varsling rettet mot brukere eller administratorgrupper. Brukes av
+// blant annet sync-jobber, AI-assistent og admin-flyter.
+model SystemNotification {
+  id           String                  @id @default(cuid())
+  kind         SystemNotificationKind
+  severity     NotificationSeverity    @default(INFO)
+  title        String
+  body         String?
+  payload      Json?
+  targetUserId String?
+  targetLevel  AccessLevel?
+  readAt       DateTime?
+  createdAt    DateTime                @default(now())
+
+  @@index([kind])
+  @@index([targetUserId])
+  @@index([targetLevel])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+// Endringslogg: en logisk gruppering av én eller flere feltendringer som
+// hører sammen (et brukerklikk, en sync-runde, en AI-batch).
+model ChangeLog {
+  id         String        @id @default(cuid())
+  actorType  ChangeActorType
+  actorId    String?
+  actorName  String?
+  source     ChangeSource
+  summary    String?
+  // Eksternt run-id som kobler flere endringslogger til samme overordnete
+  // kjøring (f.eks. en AI-batch eller en periodisk sync).
+  runId      String?
+  createdAt  DateTime      @default(now())
+
+  entries        ChangeLogEntry[]
+  syncConflicts  SyncConflict[]
+  aiActionRuns   AiActionRun[]
+
+  @@index([actorType])
+  @@index([actorId])
+  @@index([source])
+  @@index([runId])
+  @@index([createdAt])
+}
+
+// En enkelt feltendring innenfor en ChangeLog. `oldValue`/`newValue` er
+// JSON for å støtte alle Prisma-typer (string, int, bool, JSON, datoer).
+model ChangeLogEntry {
+  id           String    @id @default(cuid())
+  changeLogId  String
+  changeLog    ChangeLog @relation(fields: [changeLogId], references: [id], onDelete: Cascade)
+  model        String
+  recordId     String
+  field        String
+  oldValue     Json?
+  newValue     Json?
+  rolledBackAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([changeLogId])
+  @@index([model, recordId])
+  @@index([rolledBackAt])
+  @@index([createdAt])
+}
+
+// Konflikt oppdaget under sync mot et eksternt system (RecMan, PowerOffice).
+// Resolveres manuelt eller automatisk og kan kobles til en endringslogg når
+// resolusjonen utføres.
+model SyncConflict {
+  id            String              @id @default(cuid())
+  source        SyncSource
+  model         String
+  recordId      String?
+  field         String
+  localValue    Json?
+  remoteValue   Json?
+  detectedAt    DateTime            @default(now())
+  status        SyncConflictStatus  @default(UNRESOLVED)
+  resolution    SyncResolution?
+  resolvedAt    DateTime?
+  resolvedById  String?
+  resolvedByName String?
+  notes         String?
+  changeLogId   String?
+  changeLog     ChangeLog?          @relation(fields: [changeLogId], references: [id], onDelete: SetNull)
+
+  @@index([source])
+  @@index([model, recordId])
+  @@index([status])
+  @@index([detectedAt])
+}
+
+// Logg for AI-assistent-kjøringer. En kjøring kan inneholde en endringslogg
+// (hvis assistenten gjorde mutasjoner), et sammendrag og status.
+model AiActionRun {
+  id            String          @id @default(cuid())
+  userId        String?
+  userName      String?
+  mode          AiActionMode    @default(ASK)
+  prompt        String?
+  summary       String?
+  status        AiActionStatus  @default(PENDING)
+  errorMessage  String?
+  startedAt     DateTime        @default(now())
+  completedAt   DateTime?
+  changeLogId   String?
+  changeLog     ChangeLog?      @relation(fields: [changeLogId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([mode])
+  @@index([status])
+  @@index([startedAt])
+}
+
+enum AccessLevel {
+  MINIMUM
+  USER
+  ADMIN
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  CANCELLED
+}
+
+enum SystemNotificationKind {
+  ACCESS_REQUEST
+  SYNC_CONFLICT
+  SYNC_FAILURE
+  AI_ACTION
+  DOCUMENT_REVIEW
+  SUPPLIER_REVIEW
+  GENERIC
+}
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  ERROR
+}
+
+enum ChangeActorType {
+  USER
+  AI
+}
+
+enum ChangeSource {
+  USER_ACTION
+  AI_ASSISTANT
+  RECMAN_SYNC
+  POWEROFFICE_SYNC
+  SYSTEM
+}
+
+enum SyncSource {
+  RECMAN
+  POWEROFFICE
+}
+
+enum SyncConflictStatus {
+  UNRESOLVED
+  RESOLVED
+  IGNORED
+}
+
+enum SyncResolution {
+  KEEP_LOCAL
+  KEEP_REMOTE
+  MERGED
+  MANUAL
+}
+
+enum AiActionMode {
+  PLAN
+  ASK
+  AUTO
+  ADMIN_BYPASS
+}
+
+enum AiActionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
