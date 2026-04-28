@@ -1039,6 +1039,10 @@ model ContractorPeriod {
   updatedAt         DateTime        @updatedAt
 
   @@index([recmanCandidateId])
+  // Hot path: åpen-periode-oppslag i `transitionCategory` og
+  // `buildCategoryWhere(INNLEID)` filtrerer på (recmanCandidateId, endDate IS NULL).
+  // Composite-indeks tjener AND-filteret bedre enn enkelt-kolonne-indeksen.
+  @@index([recmanCandidateId, endDate])
 }
 
 // ─── Kandidat-importbatch ─────────────────────────────────────────

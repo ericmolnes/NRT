@@ -11,6 +11,7 @@ import {
   candidateAttributeSchema,
 } from "@/lib/validations/candidate";
 import { buildLocalCandidateCreateData } from "@/lib/personell/candidate-data";
+import { resolveCategory } from "@/lib/personell/category";
 import { revalidatePath } from "next/cache";
 
 const CORPORATION_ID = () => process.env.RECMAN_CORPORATION_ID || "2484";
@@ -205,6 +206,7 @@ export async function removeEmployment(candidateId: string) {
       recmanId: true,
       isEmployee: true,
       employeeEnd: true,
+      isContractor: true,
       personnelId: true,
     },
   });
@@ -212,6 +214,35 @@ export async function removeEmployment(candidateId: string) {
   if (!candidate.isEmployee) return { success: false as const, error: "Er ikke registrert som ansatt" };
 
   const newEnd = new Date();
+
+  // Beregn kategori-overgang før/etter for symmetrisk audit-logg. Når en
+  // ansatt-periode avsluttes går personen typisk fra ANSATT → KANDIDAT (eller
+  // INNLEID hvis de fortsatt har en åpen contractor-periode). Vi logger
+  // kategori-endringen som en egen ChangeLogEntry slik at downstream
+  // rollback-flyten (som filtrerer på `field: "category"`) kan finne den.
+  const openContractorPeriods = await db.contractorPeriod.count({
+    where: { recmanCandidateId: candidateId, endDate: null },
+  });
+  const fromCategory = resolveCategory({
+    recmanCandidate: {
+      isEmployee: candidate.isEmployee,
+      employeeEnd: candidate.employeeEnd,
+      isContractor: candidate.isContractor,
+    },
+    hasOpenContractorPeriod: openContractorPeriods > 0,
+    isManualPersonnel: false,
+    now: newEnd,
+  });
+  const toCategory = resolveCategory({
+    recmanCandidate: {
+      isEmployee: candidate.isEmployee,
+      employeeEnd: newEnd,
+      isContractor: candidate.isContractor,
+    },
+    hasOpenContractorPeriod: openContractorPeriods > 0,
+    isManualPersonnel: false,
+    now: newEnd,
+  });
 
   try {
     await db.$transaction(async (tx) => {
@@ -226,12 +257,12 @@ export async function removeEmployment(candidateId: string) {
           actorId,
           actorName,
           source: "USER_ACTION",
-          summary: "Avsluttet ansettelse (employeeEnd satt til i dag)",
+          summary: `Avsluttet ansettelse (kategori ${fromCategory} → ${toCategory})`,
         },
       });
 
-      await tx.changeLogEntry.create({
-        data: {
+      const entries: Prisma.ChangeLogEntryCreateManyInput[] = [
+        {
           changeLogId: log.id,
           model: "RecmanCandidate",
           recordId: candidateId,
@@ -239,7 +270,34 @@ export async function removeEmployment(candidateId: string) {
           oldValue: candidate.employeeEnd?.toISOString() ?? Prisma.JsonNull,
           newValue: newEnd.toISOString(),
         },
-      });
+      ];
+
+      // Synthesisert kategori-entry når kategorien faktisk endrer seg —
+      // samme format som `transitionCategory` skriver
+      // (`model: "RecmanCandidate"`, `field: "category"`) slik at rollback
+      // kan unifisere de to flytene.
+      if (fromCategory !== toCategory) {
+        entries.push({
+          changeLogId: log.id,
+          model: "RecmanCandidate",
+          recordId: candidateId,
+          field: "category",
+          oldValue: fromCategory,
+          newValue: toCategory,
+        });
+        if (candidate.personnelId) {
+          entries.push({
+            changeLogId: log.id,
+            model: "Personnel",
+            recordId: candidate.personnelId,
+            field: "category",
+            oldValue: fromCategory,
+            newValue: toCategory,
+          });
+        }
+      }
+
+      await tx.changeLogEntry.createMany({ data: entries });
     });
   } catch (error) {
     const message =

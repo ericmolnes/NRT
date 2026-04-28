@@ -17,9 +17,9 @@
 
 "use server";
 
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import { requireUser } from "@/lib/rbac";
 import { resolveCategory, type PersonnelCategory } from "./category";
 
 type CategoryRef = {
@@ -52,12 +52,16 @@ export async function transitionCategory(
   to: PersonnelCategory,
   options: TransitionOptions = {}
 ): Promise<TransitionResult> {
-  const session = await auth();
-  if (!session?.user?.id) {
+  // USER-tilgang: alle innloggede ansatte kan markere innleid-status (matcher
+  // tidligere `toggleContractor`-shim som kun krevde sesjon, og UI har ingen
+  // admin-gating på toggle-knappen i kandidat-/innleid-listene).
+  const r = await requireUser();
+  if (!r.ok) {
     return { success: false, error: "Ikke autentisert" };
   }
+  const { session } = r;
   const actorId = session.user.id;
-  const actorName = session.user.name ?? null;
+  const actorName = session.user.name ?? session.user.email ?? "Ukjent";
 
   if (!ref.personnelId && !ref.recmanCandidateId) {
     return {
@@ -191,6 +195,22 @@ export async function transitionCategory(
               notes: options.notes ?? null,
             },
           });
+          // Invariant-vakt mot samtidighetsrace: hvis to admin-er klikker
+          // "marker som innleid" samtidig kan begge passere `findFirst`-sjekken
+          // over og opprette hver sin åpne periode. Vi teller åpne perioder
+          // *etter* create — under READ COMMITTED ser hver tx kun egne writes
+          // pluss committed data, så denne sjekken er en defense-in-depth som
+          // fanger duplikater når den andre tx-en commit-er først. Den lukker
+          // ikke racet helt (det krever et partial unique index
+          // `WHERE endDate IS NULL`), men konverterer stille datakorrupsjon
+          // til en synlig feil. Skjema-indeksen `@@index([recmanCandidateId,
+          // endDate])` (lagt til i samme runde) gjør oppslaget billig.
+          const openCount = await tx.contractorPeriod.count({
+            where: { recmanCandidateId: candidate.id, endDate: null },
+          });
+          if (openCount !== 1) {
+            throw new Error("Innleid-periode finnes allerede");
+          }
           periodChanges.push({
             recordId: created.id,
             field: "startDate",
