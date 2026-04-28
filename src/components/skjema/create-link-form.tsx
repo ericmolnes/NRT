@@ -16,6 +16,14 @@ import { Lock, Globe, Shield, Plus, X, ChevronDown, ChevronRight, FileText, List
 import { cn, getInitials } from "@/lib/utils";
 import { DEFAULT_CRITERIA, type Criterion } from "@/lib/validations/evaluation";
 
+type LinkPersonnelCategory = "ANSATT" | "INNLEID" | "KANDIDAT";
+
+const CATEGORY_OPTIONS: { value: LinkPersonnelCategory; label: string }[] = [
+  { value: "ANSATT", label: "Ansatte" },
+  { value: "INNLEID", label: "Innleide" },
+  { value: "KANDIDAT", label: "Kandidater" },
+];
+
 interface Personnel {
   id: string;
   name: string;
@@ -248,8 +256,8 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
   );
   const [formType, setFormType] = useState("EVALUATION");
   const [authMode, setAuthMode] = useState("NONE");
-  const [deptFilter, setDeptFilter] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
+  const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<LinkPersonnelCategory[]>([]);
   const [criteria, setCriteria] = useState<Criterion[]>(DEFAULT_CRITERIA);
   const [activeTemplateId, setActiveTemplateId] = useState<string>("default");
   const [selectedPersonnel, setSelectedPersonnel] = useState<string[]>([]);
@@ -260,28 +268,67 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
   const [, deleteTemplateAction] = useActionState<ActionState, FormData>(deleteTemplate, {});
   const [, startTransition] = useTransition();
 
+  function deriveCategory(p: Personnel): LinkPersonnelCategory {
+    const rc = p.recmanCandidate;
+    if (rc?.isEmployee && !rc.isContractor) return "ANSATT";
+    if (rc?.isContractor) return "INNLEID";
+    if (!rc && p.role === "Ansatt") return "ANSATT";
+    if (!rc && p.role === "Innleid") return "INNLEID";
+    if (rc) return "KANDIDAT";
+    return "INNLEID";
+  }
+
   const filteredPersonnel = useMemo(() => {
     let result = personnel;
-    if (deptFilter) {
-      result = result.filter((p) => p.recmanCandidate?.corporationId === deptFilter);
-    }
-    if (roleFilter === "Innleid") {
+    if (selectedDepartments.length > 0) {
       result = result.filter(
         (p) =>
-          p.recmanCandidate?.isContractor === true ||
-          (!p.recmanCandidate && p.role === "Innleid")
+          p.recmanCandidate?.corporationId &&
+          selectedDepartments.includes(p.recmanCandidate.corporationId)
       );
-    } else if (roleFilter === "Ansatt") {
-      result = result.filter(
-        (p) =>
-          p.status === "ACTIVE" &&
-          ((p.recmanCandidate?.isEmployee === true &&
-            p.recmanCandidate?.isContractor !== true) ||
-            (!p.recmanCandidate && p.role === "Ansatt"))
+    }
+    if (selectedCategories.length > 0) {
+      result = result.filter((p) =>
+        selectedCategories.includes(deriveCategory(p))
       );
     }
     return result;
-  }, [personnel, deptFilter, roleFilter]);
+  }, [personnel, selectedDepartments, selectedCategories]);
+
+  // Bygg en menneskelig forhåndsvisning av filteret slik at admin ser hva
+  // lenken faktisk vil tillate.
+  const filterPreview = useMemo(() => {
+    const parts: string[] = [];
+    if (selectedCategories.length === 0) {
+      parts.push("alle kategorier");
+    } else {
+      const labels = selectedCategories.map(
+        (c) => CATEGORY_OPTIONS.find((o) => o.value === c)?.label ?? c
+      );
+      parts.push(labels.join(" / "));
+    }
+    if (selectedDepartments.length === 0) {
+      parts.push("alle avdelinger");
+    } else {
+      const labels = selectedDepartments.map(
+        (d) => departments.find((dep) => dep.value === d)?.label ?? d
+      );
+      parts.push(`avdeling ${labels.join(", ")}`);
+    }
+    return parts.join(" i ");
+  }, [selectedCategories, selectedDepartments, departments]);
+
+  function toggleCategory(cat: LinkPersonnelCategory) {
+    setSelectedCategories((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  }
+
+  function toggleDepartment(dept: string) {
+    setSelectedDepartments((prev) =>
+      prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
+    );
+  }
 
   return (
     <div className="rounded-xl border border-[oklch(0.90_0.012_250)] bg-card shadow-sm overflow-hidden">
@@ -519,35 +566,72 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
         {/* ─── Section 4: Distribution ─── */}
         <div className="px-5 py-5 sm:px-6 space-y-4">
           <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Distribusjon</Label>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+
+          {/* Filter-forhåndsvisning slik at admin ser hva lenken vil tillate. */}
+          <div className="rounded-lg border border-[oklch(0.92_0.01_250)] bg-[oklch(0.985_0.003_250)] px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Lenken vil tillate evaluering av</p>
+            <p className="text-sm font-medium mt-0.5 text-[oklch(0.18_0.035_250)]">{filterPreview}</p>
+          </div>
+
+          {/* Hidden inputs som sendes til server-action. */}
+          <input type="hidden" name="categoriesFilter" value={JSON.stringify(selectedCategories)} />
+          <input type="hidden" name="departmentsFilter" value={JSON.stringify(selectedDepartments)} />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Kategori (multi-select via toggle-knapper) */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Kategori (la stå tom for alle)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CATEGORY_OPTIONS.map((opt) => {
+                  const active = selectedCategories.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleCategory(opt.value)}
+                      className={cn(
+                        "text-xs px-2.5 py-1 rounded-full border transition-colors",
+                        active
+                          ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_8%)] text-[oklch(0.40_0.12_178)] font-medium"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Avdelinger (multi-select via toggle-knapper) */}
             {departments.length > 0 && (
-              <div className="space-y-1">
-                <label className="text-xs text-muted-foreground">Avdeling</label>
-                <select
-                  className="flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm"
-                  value={deptFilter}
-                  onChange={(e) => setDeptFilter(e.target.value)}
-                >
-                  <option value="">Alle</option>
-                  {departments.map((d) => (
-                    <option key={d.value} value={d.value}>{d.label}</option>
-                  ))}
-                </select>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Avdeling (la stå tom for alle)</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {departments.map((d) => {
+                    const active = selectedDepartments.includes(d.value);
+                    return (
+                      <button
+                        key={d.value}
+                        type="button"
+                        onClick={() => toggleDepartment(d.value)}
+                        className={cn(
+                          "text-xs px-2.5 py-1 rounded-full border transition-colors",
+                          active
+                            ? "border-[oklch(0.89_0.17_178)] bg-[oklch(0.89_0.17_178_/_8%)] text-[oklch(0.40_0.12_178)] font-medium"
+                            : "border-border text-muted-foreground hover:border-muted-foreground/40"
+                        )}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Rolle</label>
-              <select
-                className="flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm"
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-              >
-                <option value="">Alle roller</option>
-                <option value="Ansatt">Ansatte</option>
-                <option value="Innleid">Innleide</option>
-              </select>
-              <input type="hidden" name="roleFilter" value={roleFilter} />
-            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="space-y-1 sm:col-span-2">
               <label className="text-xs text-muted-foreground">
                 Begrens til personell {selectedPersonnel.length > 0 && (

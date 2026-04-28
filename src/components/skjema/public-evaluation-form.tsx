@@ -18,12 +18,12 @@ import { cn, getInitials } from "@/lib/utils";
 function SubCriteriaGroup({
   parentKey,
   parentLabel,
-  children,
+  criteria,
   errors,
 }: {
   parentKey: string;
   parentLabel: string;
-  children: Criterion[];
+  criteria: Criterion[];
   errors?: Record<string, string[] | undefined>;
 }) {
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -40,7 +40,7 @@ function SubCriteriaGroup({
 
   return (
     <div className="sm:pl-9 space-y-3">
-      {children.map((sub) => (
+      {criteria.map((sub) => (
         <div key={sub.key} className="space-y-1.5">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-1.5 rounded-full bg-[oklch(0.89_0.17_178_/_50%)] shrink-0" />
@@ -75,7 +75,7 @@ function SubCriteriaGroup({
             <span>{parentLabel}:</span>
             <span className="tabular-nums">{avg}/10</span>
             <span className="text-[10px] font-normal opacity-70">
-              (snitt av {filledCount}/{children.length})
+              (snitt av {filledCount}/{criteria.length})
             </span>
           </div>
           <div className="flex-1 h-px bg-[oklch(0.92_0.01_250)]" />
@@ -328,7 +328,7 @@ export function PublicEvaluationForm({
                     <SubCriteriaGroup
                       parentKey={criterion.key}
                       parentLabel={criterion.label}
-                      children={criterion.children!}
+                      criteria={criterion.children!}
                       errors={state.errors}
                     />
                   ) : (

@@ -8,34 +8,16 @@ import {
 import { EVALUATION_CRITERIA, type Criterion } from "@/lib/validations/evaluation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isPersonnelAllowedForFormLink } from "@/lib/forms/personnel-access";
+import {
+  getDynamicFieldValue,
+  shouldPersistDynamicFieldValue,
+  validateDynamicFieldValue,
+} from "@/lib/forms/dynamic-fields";
 
-function validateFieldType(
-  value: string,
-  type: string,
-  fieldName: string,
-  options: string | null
-): string | null {
-  switch (type) {
-    case "NUMBER":
-      if (isNaN(Number(value))) return `${fieldName} må være et tall`;
-      break;
-    case "DATE":
-      if (isNaN(Date.parse(value))) return `${fieldName} må være en gyldig dato`;
-      break;
-    case "SELECT":
-      if (options) {
-        const allowed = options.split(",").map((o) => o.trim());
-        if (!allowed.includes(value))
-          return `${fieldName} har en ugyldig verdi`;
-      }
-      break;
-    case "BOOLEAN":
-      if (value !== "true" && value !== "false")
-        return `${fieldName} må være true eller false`;
-      break;
-  }
-  return null;
-}
+const PERSONNEL_NOT_ALLOWED_ERROR =
+  "Valgt personell er ikke tilgjengelig for dette skjemaet";
+
 
 export type PublicActionState = {
   errors?: Record<string, string[] | undefined>;
@@ -80,8 +62,28 @@ export async function submitPublicEvaluation(
     return { errors: { personnelId: ["Velg personell"] } };
   }
 
-  const personnel = await db.personnel.findUnique({ where: { id: personnelId } });
+  const personnel = await db.personnel.findUnique({
+    where: { id: personnelId },
+    select: {
+      id: true,
+      status: true,
+      role: true,
+      department: true,
+      recmanCandidate: {
+        select: {
+          isContractor: true,
+          isEmployee: true,
+          employeeEnd: true,
+          corporationId: true,
+          contractorPeriods: { select: { endDate: true } },
+        },
+      },
+    },
+  });
   if (!personnel) return { message: "Personellet ble ikke funnet" };
+  if (!isPersonnelAllowedForFormLink(link, personnel)) {
+    return { errors: { personnelId: [PERSONNEL_NOT_ALLOWED_ERROR] } };
+  }
 
   // Determine which criteria to use
   const customCriteria = link.criteria as Criterion[] | null;
@@ -240,24 +242,40 @@ export async function submitPublicCustomFields(
 
   const personnel = await db.personnel.findUnique({
     where: { id: personnelId },
+    select: {
+      id: true,
+      status: true,
+      role: true,
+      department: true,
+      recmanCandidate: {
+        select: {
+          isContractor: true,
+          isEmployee: true,
+          employeeEnd: true,
+          corporationId: true,
+          contractorPeriods: { select: { endDate: true } },
+        },
+      },
+    },
   });
   if (!personnel) {
     return { message: "Personellet ble ikke funnet" };
   }
+  if (!isPersonnelAllowedForFormLink(link, personnel)) {
+    return { errors: { personnelId: [PERSONNEL_NOT_ALLOWED_ERROR] } };
+  }
+
+  const fieldValues = link.category.fields.map((field) => ({
+    field,
+    value: getDynamicFieldValue(formData, field),
+  }));
 
   // Validate required fields and field types
   const errors: Record<string, string[]> = {};
-  for (const field of link.category.fields) {
-    const value = (formData.get(`field_${field.id}`) as string) ?? "";
-    if (field.required && !value) {
-      errors[field.id] = [`${field.name} er påkrevd`];
-      continue;
-    }
-    if (value) {
-      const typeError = validateFieldType(value, field.type, field.name, field.options);
-      if (typeError) {
-        errors[field.id] = [typeError];
-      }
+  for (const { field, value } of fieldValues) {
+    const typeError = validateDynamicFieldValue(field, value);
+    if (typeError) {
+      errors[field.id] = [typeError];
     }
   }
   if (Object.keys(errors).length > 0) {
@@ -266,13 +284,11 @@ export async function submitPublicCustomFields(
 
   // Upsert field values in parallel
   await Promise.all(
-    link.category.fields
-      .filter((field) => {
-        const value = (formData.get(`field_${field.id}`) as string) ?? "";
-        return !!value;
-      })
-      .map((field) => {
-        const value = (formData.get(`field_${field.id}`) as string) ?? "";
+    fieldValues
+      .filter(({ field, value }) =>
+        shouldPersistDynamicFieldValue(field, value)
+      )
+      .map(({ field, value }) => {
         return db.fieldValue.upsert({
           where: {
             personnelId_fieldId: { personnelId, fieldId: field.id },

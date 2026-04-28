@@ -129,6 +129,66 @@ export async function getPersonnelForPublicForm(roleFilter?: string | null) {
   });
 }
 
+/**
+ * Henter personellet som kan velges på en lenke ut fra strukturerte filtre
+ * (kategori + avdeling). Brukes av public form-sidene slik at picker-en kun
+ * viser personer som faktisk vil passere `isPersonnelAllowedForFormLink` på
+ * server-side.
+ *
+ * Vi går rett på Personnel-tabellen i stedet for `getPersonnelishList` her,
+ * fordi public-form trenger en tynn shape og må inkludere INACTIVE personer
+ * (gamle ansatte-lenker som fortsatt skal kunne fylles ut). Vi gjenbruker
+ * `buildCategoryWhere` for å holde kategori-logikken konsistent.
+ */
+export async function getPersonnelForLinkFilters(filters: {
+  categories: ("ANSATT" | "INNLEID" | "KANDIDAT")[] | null;
+  departments: string[] | null;
+}): Promise<Array<{ id: string; name: string; role: string }>> {
+  const { buildCategoryWhere } = await import("@/lib/personell/category");
+  const ANDs: Prisma.PersonnelWhereInput[] = [];
+
+  if (filters.categories && filters.categories.length > 0) {
+    if (filters.categories.length === 1) {
+      ANDs.push(
+        buildCategoryWhere(filters.categories[0]) as Prisma.PersonnelWhereInput
+      );
+    } else {
+      ANDs.push({
+        OR: filters.categories.map(
+          (c) => buildCategoryWhere(c) as Prisma.PersonnelWhereInput
+        ),
+      });
+    }
+  }
+
+  if (filters.departments && filters.departments.length > 0) {
+    // Behold support for både RecMan-corporationId og fallback på
+    // Personnel.department for manuelt opprettede rader.
+    ANDs.push({
+      OR: [
+        {
+          recmanCandidate: {
+            corporationId: { in: filters.departments },
+          },
+        },
+        {
+          recmanCandidate: { is: null },
+          department: { in: filters.departments },
+        },
+      ],
+    });
+  }
+
+  return db.personnel.findMany({
+    select: { id: true, name: true, role: true },
+    where: {
+      status: { not: "ARCHIVED" },
+      ...(ANDs.length > 0 ? { AND: ANDs } : {}),
+    },
+    orderBy: { name: "asc" },
+  });
+}
+
 export interface GroupedEvaluation {
   personnelId: string;
   name: string;

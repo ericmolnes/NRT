@@ -1,11 +1,15 @@
 import { notFound } from "next/navigation";
 import { getEvaluationLinkByToken } from "@/lib/queries/evaluation-links";
-import { getPersonnelForPublicForm } from "@/lib/queries/evaluations";
+import {
+  getPersonnelForLinkFilters,
+  getPersonnelForPublicForm,
+} from "@/lib/queries/evaluations";
 import { db } from "@/lib/db";
 import { PublicEvaluationForm } from "@/components/skjema/public-evaluation-form";
 import { PublicCustomFieldsForm } from "@/components/skjema/public-custom-fields-form";
 import { auth } from "@/lib/auth";
 import { FormAuthWrapper } from "@/components/skjema/form-auth-wrapper";
+import { parseLinkFilters } from "@/lib/forms/link-filters";
 
 interface PageProps {
   params: Promise<{ token: string }>;
@@ -60,7 +64,7 @@ export default async function PublicFormPage({ params }: PageProps) {
   }
 
   // Password auth: gate client-side (form content is children, shown after password verified)
-  // Determine personnel list: single lock > multi lock > all
+  // Determine personnel list: single lock > multi lock > category/department filter > legacy roleFilter
   const personnelIdsArr = link.personnelIds as string[] | null;
   let personnelList: { id: string; name: string; role: string }[];
 
@@ -75,7 +79,16 @@ export default async function PublicFormPage({ params }: PageProps) {
       orderBy: { name: "asc" },
     });
   } else {
-    personnelList = await getPersonnelForPublicForm(link.roleFilter);
+    const filters = parseLinkFilters(link);
+    if (filters.categories || filters.departments) {
+      personnelList = await getPersonnelForLinkFilters({
+        categories: filters.categories,
+        departments: filters.departments,
+      });
+    } else {
+      // Ingen strukturerte filtre — bruk legacy-stien.
+      personnelList = await getPersonnelForPublicForm(link.roleFilter);
+    }
   }
 
   const formContent = (

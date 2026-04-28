@@ -76,14 +76,54 @@ export async function createEvaluationLink(
     }
   }
 
-  // Role filter: "Ansatt" | "Innleid" | empty
-  const roleFilter = (formData.get("roleFilter") as string) || null;
+  // Strukturerte filtre — kategori (ANSATT|INNLEID|KANDIDAT) og avdeling.
+  const VALID_CATEGORIES = new Set(["ANSATT", "INNLEID", "KANDIDAT"]);
+  let categoriesFilter: string[] | null = null;
+  const categoriesJson = formData.get("categoriesFilter") as string | null;
+  if (categoriesJson) {
+    try {
+      const arr = JSON.parse(categoriesJson);
+      if (Array.isArray(arr)) {
+        const cleaned = arr.filter(
+          (c): c is string => typeof c === "string" && VALID_CATEGORIES.has(c)
+        );
+        if (cleaned.length > 0) categoriesFilter = cleaned;
+      }
+    } catch { /* ignore */ }
+  }
+
+  let departmentsFilter: string[] | null = null;
+  const departmentsJson = formData.get("departmentsFilter") as string | null;
+  if (departmentsJson) {
+    try {
+      const arr = JSON.parse(departmentsJson);
+      if (Array.isArray(arr)) {
+        const cleaned = arr.filter(
+          (d): d is string => typeof d === "string" && d.length > 0
+        );
+        if (cleaned.length > 0) departmentsFilter = cleaned;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Bakoverkompatibilitet: hvis bare legacy `roleFilter` er sendt inn, mapp
+  // den over til `categoriesFilter`. Den nye UI-en bør sende
+  // `categoriesFilter` direkte, så dette er en sikkerhetsventil.
+  const legacyRoleFilter = (formData.get("roleFilter") as string) || null;
+  if (!categoriesFilter && legacyRoleFilter) {
+    if (legacyRoleFilter === "Ansatt") categoriesFilter = ["ANSATT"];
+    else if (legacyRoleFilter === "Innleid") categoriesFilter = ["INNLEID"];
+  }
 
   await db.evaluationLink.create({
     data: {
       personnelId: personnelIds.length === 1 ? personnelIds[0] : undefined,
       personnelIds: personnelIds.length > 1 ? personnelIds : undefined,
-      roleFilter,
+      // Behold `roleFilter` for bakoverkompatibilitet med eksisterende
+      // lenker i UI-listen som ikke har migrert ennå.
+      roleFilter: legacyRoleFilter,
+      categoriesFilter: categoriesFilter ?? undefined,
+      departmentsFilter: departmentsFilter ?? undefined,
       title: parsed.data.title,
       formType: parsed.data.formType,
       authMode: parsed.data.authMode,
