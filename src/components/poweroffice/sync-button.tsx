@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { triggerSync, type ActionState } from "@/app/(authenticated)/poweroffice/actions";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertTriangle } from "lucide-react";
 import type { SyncResourceType } from "@/lib/poweroffice/sync-all";
 
 export function SyncButton({
@@ -22,6 +22,10 @@ export function SyncButton({
     {}
   );
 
+  const conflicts = state.conflicts;
+  const hasConflicts =
+    !!conflicts && (conflicts.conflicts > 0 || conflicts.missingLink > 0);
+
   return (
     <form action={action}>
       <input type="hidden" name="resource" value={resource} />
@@ -30,7 +34,15 @@ export function SyncButton({
         {isPending ? "Synkroniserer..." : label}
       </Button>
       {state.message && (
-        <p className="mt-1 text-xs text-muted-foreground">{state.message}</p>
+        <p
+          className={
+            "mt-1 text-xs flex items-center gap-1 " +
+            (hasConflicts ? "text-amber-600" : "text-muted-foreground")
+          }
+        >
+          {hasConflicts && <AlertTriangle className="h-3 w-3" />}
+          {state.message}
+        </p>
       )}
     </form>
   );

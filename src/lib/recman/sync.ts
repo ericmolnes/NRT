@@ -13,17 +13,32 @@ import {
 import { syncRecmanCompanies } from "./sync-companies";
 import { syncRecmanProjects } from "./sync-projects";
 import { syncRecmanJobs } from "./sync-jobs";
+import {
+  emptySyncResult,
+  mergeSyncResults,
+  notifySyncResult,
+  type SyncQueueClient,
+  type SyncResult,
+} from "@/lib/sync/sync-queue";
 
 /**
  * Full Recman sync: candidates → companies → projects → jobs
  * Order matters: companies must exist before projects, projects before jobs.
+ *
+ * Returnerer både per-ressurs-status og en samlet `conflicts`-blokk.
+ * Konfliktdetektor er foreløpig kun aktiv for kandidater (ansatt-data);
+ * andre ressurser bruker fortsatt eksisterende blind upsert. Når andre
+ * sync-paths flyttes over til detector-modellen, summeres de inn her.
  */
 export async function syncAllRecman(triggeredBy: string) {
   const results: Record<string, unknown> = {};
+  const collectedConflicts: SyncResult[] = [];
 
   // 1. Sync candidates (employees)
   try {
-    results.candidates = await syncAllCandidates(triggeredBy);
+    const cand = await syncAllCandidates(triggeredBy);
+    results.candidates = cand;
+    if (cand.conflicts) collectedConflicts.push(cand.conflicts);
   } catch (e) {
     results.candidates = { error: e instanceof Error ? e.message : String(e) };
   }
@@ -49,7 +64,21 @@ export async function syncAllRecman(triggeredBy: string) {
     results.jobs = { error: e instanceof Error ? e.message : String(e) };
   }
 
-  return results;
+  const conflicts = mergeSyncResults(collectedConflicts);
+
+  if (conflicts.conflicts > 0 || conflicts.missingLink > 0) {
+    try {
+      await notifySyncResult(
+        db as unknown as SyncQueueClient,
+        "RECMAN",
+        conflicts
+      );
+    } catch (err) {
+      console.error("[Recman Sync] Klarte ikke opprette varsel:", err);
+    }
+  }
+
+  return { ...results, conflicts };
 }
 
 export async function syncAllCandidates(triggeredBy: string) {
@@ -87,7 +116,17 @@ export async function syncAllCandidates(triggeredBy: string) {
       },
     });
 
-    return { total: candidates.length, synced, failed };
+    // RecmanCandidate har foreløpig ikke en lagret base-snapshot å
+    // sammenligne mot, så vi skipper detektor her og returnerer et tomt
+    // konfliktresultat. Når base lagres (egen kolonne eller egen logg),
+    // kan denne syncen flyttes over til detector/queue-modellen på
+    // samme måte som sync-employees.ts.
+    return {
+      total: candidates.length,
+      synced,
+      failed,
+      conflicts: emptySyncResult(),
+    };
   } catch (e) {
     await db.recmanSyncLog.update({
       where: { id: log.id },

@@ -1,10 +1,30 @@
 import { db } from "@/lib/db";
+import type { SyncResult } from "@/lib/sync/sync-queue";
+import { emptySyncResult } from "@/lib/sync/sync-queue";
 
 export interface SyncOptions<TPO> {
   resourceType: string;
   fetchAll: () => Promise<TPO[]>;
   upsertItem: (item: TPO) => Promise<void>;
   userId: string;
+}
+
+/**
+ * Standard returtype for PowerOffice-sync. `conflicts` populeres av
+ * sync-funksjoner som har integrert konfliktdetektor (i første omgang
+ * `syncEmployees`); andre funksjoner returnerer fortsatt et tomt
+ * SyncResult slik at samlebåndet i `runSync` kan aggregere uniformt.
+ */
+export type SyncSummary = {
+  syncLogId: string;
+  total: number;
+  synced: number;
+  failed: number;
+  conflicts: SyncResult;
+};
+
+export function emptyConflictSummary(): SyncResult {
+  return emptySyncResult();
 }
 
 export async function syncResource<TPO>(options: SyncOptions<TPO>) {

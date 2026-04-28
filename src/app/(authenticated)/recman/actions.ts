@@ -7,10 +7,22 @@ import { syncAllCandidates, syncAllRecman } from "@/lib/recman/sync";
 import { revalidatePath } from "next/cache";
 import { type Prisma } from "@/generated/prisma/client";
 import { SKILL_CATEGORIES } from "@/lib/recman/types";
+import type { SyncResult } from "@/lib/sync/sync-queue";
 
 // ─── Synkronisering ─────────────────────────────────────────────────
 
-export async function triggerRecmanSync() {
+/**
+ * Returtype for sync-actions. Speiler PowerOffice-kontrakten slik at
+ * frontend (sync-button) kan vise konsistent oppsummering uavhengig av
+ * hvilken kilde som ble synket.
+ */
+export type RecmanSyncActionResult = {
+  message: string;
+  conflicts: SyncResult;
+  raw: Awaited<ReturnType<typeof syncAllRecman>>;
+};
+
+export async function triggerRecmanSync(): Promise<RecmanSyncActionResult> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Ikke autentisert");
 
@@ -21,7 +33,30 @@ export async function triggerRecmanSync() {
   revalidatePath("/jobber");
   revalidatePath("/ressursplan");
   revalidatePath("/settings");
-  return result;
+
+  const conflicts = result.conflicts;
+  return {
+    message: summarizeResult(conflicts),
+    conflicts,
+    raw: result,
+  };
+}
+
+function summarizeResult(r: SyncResult): string {
+  if (
+    r.applied === 0 &&
+    r.conflicts === 0 &&
+    r.pendingPush === 0 &&
+    r.missingLink === 0
+  ) {
+    return "Synkronisering fullført — ingen endringer";
+  }
+  const parts: string[] = [];
+  if (r.applied) parts.push(`${r.applied} oppdatert`);
+  if (r.conflicts) parts.push(`${r.conflicts} konflikt${r.conflicts === 1 ? "" : "er"}`);
+  if (r.pendingPush) parts.push(`${r.pendingPush} venter på push`);
+  if (r.missingLink) parts.push(`${r.missingLink} mangler kobling`);
+  return `Synket. ${parts.join(", ")}.`;
 }
 
 export async function getLastSync() {
