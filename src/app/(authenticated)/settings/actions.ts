@@ -32,6 +32,12 @@ export async function saveAiModel(model: string) {
 // helperen) fordi vi allerede er inne i en `$transaction` — recordChange
 // ville startet en ny nestet transaksjon. Resultatet er funksjonelt det
 // samme: én ChangeLog med to ChangeLogEntries, atomisk med selve endringen.
+//
+// Status-overgangen er atomisk: vi bruker `updateMany` med
+// `{ id, status: "PENDING" }` som filter. Hvis to admins klikker samtidig
+// vil bare én av transaksjonene oppdatere raden — den andre får `count = 0`
+// og kaster en feil. Dette unngår TOCTOU-løpet vi ville hatt med en
+// pre-transaksjons `findUnique` etterfulgt av en betingelsesløs `update`.
 
 /**
  * Godkjenn en tilgangsforespørsel. Oppretter eller oppdaterer
@@ -49,6 +55,9 @@ export async function approveAccessRequest(
   const actorId = session.user.id;
   const actorName = session.user.name ?? null;
 
+  // Vi henter de uforanderlige feltene (e-post, entraId, displayName) utenfor
+  // transaksjonen — disse endrer seg aldri på en AccessRequest, så det er
+  // trygt. Status-overgangen sjekkes derimot atomisk inne i transaksjonen.
   const request = await db.accessRequest.findUnique({
     where: { id: requestId },
     select: {
@@ -56,14 +65,10 @@ export async function approveAccessRequest(
       email: true,
       entraId: true,
       displayName: true,
-      status: true,
     },
   });
 
   if (!request) throw new Error("Forespørselen finnes ikke");
-  if (request.status !== "PENDING") {
-    throw new Error("Forespørselen er allerede behandlet");
-  }
 
   const result = await db.$transaction(async (tx) => {
     // Eksisterende rad? Match på entraId først, deretter e-post.
@@ -109,8 +114,10 @@ export async function approveAccessRequest(
       oldLevel = null;
     }
 
-    await tx.accessRequest.update({
-      where: { id: request.id },
+    // Atomisk status-overgang: kun én transaksjon kan flytte raden ut av
+    // PENDING. Hvis count === 0 har en annen admin allerede behandlet den.
+    const transition = await tx.accessRequest.updateMany({
+      where: { id: request.id, status: "PENDING" },
       data: {
         status: "APPROVED",
         resolvedById: actorId,
@@ -119,6 +126,10 @@ export async function approveAccessRequest(
         userAccessId,
       },
     });
+
+    if (transition.count !== 1) {
+      throw new Error("Forespørselen er allerede behandlet");
+    }
 
     // Endringslogg, atomisk i samme transaksjon.
     const log = await tx.changeLog.create({
@@ -169,18 +180,17 @@ export async function denyAccessRequest(requestId: string, note?: string) {
   const actorId = session.user.id;
   const actorName = session.user.name ?? null;
 
+  // Hent de uforanderlige feltene utenfor transaksjonen (vi trenger e-posten
+  // for endringsloggens summary). Status-sjekken gjøres atomisk inne i tx.
   const request = await db.accessRequest.findUnique({
     where: { id: requestId },
-    select: { id: true, status: true, email: true },
+    select: { id: true, email: true },
   });
   if (!request) throw new Error("Forespørselen finnes ikke");
-  if (request.status !== "PENDING") {
-    throw new Error("Forespørselen er allerede behandlet");
-  }
 
   await db.$transaction(async (tx) => {
-    await tx.accessRequest.update({
-      where: { id: request.id },
+    const transition = await tx.accessRequest.updateMany({
+      where: { id: request.id, status: "PENDING" },
       data: {
         status: "DENIED",
         resolvedById: actorId,
@@ -189,6 +199,10 @@ export async function denyAccessRequest(requestId: string, note?: string) {
         resolutionNote: note?.trim() || null,
       },
     });
+
+    if (transition.count !== 1) {
+      throw new Error("Forespørselen er allerede behandlet");
+    }
 
     const log = await tx.changeLog.create({
       data: {
