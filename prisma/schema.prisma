@@ -1406,6 +1406,7 @@ model AccessRequest {
   @@index([status])
   @@index([userAccessId])
   @@index([email])
+  @@index([entraId])
   @@index([createdAt])
 }
 
@@ -1427,6 +1428,7 @@ model SystemNotification {
   @@index([targetUserId])
   @@index([targetLevel])
   @@index([readAt])
+  @@index([targetUserId, readAt])
   @@index([createdAt])
 }
 
@@ -1472,6 +1474,7 @@ model ChangeLogEntry {
   @@index([changeLogId])
   @@index([model, recordId])
   @@index([rolledBackAt])
+  @@index([changeLogId, rolledBackAt])
   @@index([createdAt])
 }
 
@@ -1500,6 +1503,7 @@ model SyncConflict {
   @@index([model, recordId])
   @@index([status])
   @@index([detectedAt])
+  @@index([status, detectedAt])
 }
 
 // Logg for AI-assistent-kjøringer. En kjøring kan inneholde en endringslogg
@@ -1522,6 +1526,7 @@ model AiActionRun {
   @@index([mode])
   @@index([status])
   @@index([startedAt])
+  @@index([userId, startedAt])
 }
 
 enum AccessLevel {
