@@ -69,7 +69,6 @@ function roleFilterWhere(
     return {
       OR: [
         { recmanCandidate: { isContractor: true } },
-        { recmanCandidate: { contractorPeriods: { some: {} } } },
         { recmanCandidate: null, role: "Innleid" },
       ],
     };
@@ -91,6 +90,7 @@ export async function getAllPersonnel(roleFilter?: string | null) {
       id: true,
       name: true,
       role: true,
+      status: true,
       recmanCandidate: {
         select: {
           corporationId: true,
@@ -100,8 +100,18 @@ export async function getAllPersonnel(roleFilter?: string | null) {
       },
     },
     where: {
-      status: "ACTIVE",
-      ...roleFilterWhere(roleFilter),
+      AND: [
+        {
+          OR: [
+            { status: "ACTIVE" },
+            {
+              status: "INACTIVE",
+              recmanCandidate: { isContractor: true },
+            },
+          ],
+        },
+        roleFilterWhere(roleFilter),
+      ],
     },
     orderBy: { name: "asc" },
   });

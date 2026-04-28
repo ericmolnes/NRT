@@ -193,46 +193,47 @@ async function upsertCandidate(c: RecmanCandidate) {
     select: { id: true, personnelId: true },
   });
 
-  // Auto-match or create Personnel for employees only
-  if (hasEmployee) {
-    const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
+  // Auto-match or create Personnel for ALL synced candidates.
+  // Status- og role-oppdatering basert på Recman-employee-data gjøres kun
+  // for ansatte; innleide- og kandidat-status styres manuelt i NRT.
+  if (!candidate.personnelId) {
+    const personnelId = await findOrCreatePersonnel({
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email || undefined,
+      phone: c.mobilePhone || c.phone || undefined,
+      role: hasEmployee ? c.title || "Ansatt" : c.title || "Kandidat",
+    });
 
-    if (!candidate.personnelId) {
-      const personnelId = await findOrCreatePersonnel({
-        firstName: c.firstName,
-        lastName: c.lastName,
-        email: c.email || undefined,
-        phone: c.mobilePhone || c.phone || undefined,
-        role: c.title || "Ansatt",
-      });
+    await db.recmanCandidate.update({
+      where: { id: candidate.id },
+      data: { personnelId },
+    });
 
-      await db.recmanCandidate.update({
-        where: { id: candidate.id },
-        data: { personnelId },
-      });
-
+    if (hasEmployee) {
+      const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
       if (targetStatus !== "ACTIVE") {
         await db.personnel.update({
           where: { id: personnelId },
           data: { status: targetStatus },
         });
       }
-    } else {
-      await enrichPersonnel(candidate.personnelId, {
-        phone: c.mobilePhone || c.phone,
-      });
+    }
+  } else if (hasEmployee) {
+    await enrichPersonnel(candidate.personnelId, {
+      phone: c.mobilePhone || c.phone,
+    });
 
-      // Only update status if it actually changed
-      const current = await db.personnel.findUnique({
+    const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
+    const current = await db.personnel.findUnique({
+      where: { id: candidate.personnelId },
+      select: { status: true },
+    });
+    if (current && current.status !== targetStatus) {
+      await db.personnel.update({
         where: { id: candidate.personnelId },
-        select: { status: true },
+        data: { status: targetStatus },
       });
-      if (current && current.status !== targetStatus) {
-        await db.personnel.update({
-          where: { id: candidate.personnelId },
-          data: { status: targetStatus },
-        });
-      }
     }
   }
 }

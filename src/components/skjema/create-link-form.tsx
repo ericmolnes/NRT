@@ -11,6 +11,7 @@ import {
   type ActionState,
 } from "@/app/(authenticated)/skjema/actions";
 import type { Department } from "@/lib/queries/personnel";
+import type { PersonnelStatus } from "@/generated/prisma/enums";
 import { Lock, Globe, Shield, Plus, X, ChevronDown, ChevronRight, FileText, ListChecks, Save, Trash2, BookOpen } from "lucide-react";
 import { cn, getInitials } from "@/lib/utils";
 import { DEFAULT_CRITERIA, type Criterion } from "@/lib/validations/evaluation";
@@ -19,6 +20,7 @@ interface Personnel {
   id: string;
   name: string;
   role: string;
+  status: PersonnelStatus;
   recmanCandidate: {
     corporationId: string | null;
     isContractor: boolean;
@@ -265,14 +267,17 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
     }
     if (roleFilter === "Innleid") {
       result = result.filter(
-        (p) => p.recmanCandidate?.isContractor === true || p.role === "Innleid"
+        (p) =>
+          p.recmanCandidate?.isContractor === true ||
+          (!p.recmanCandidate && p.role === "Innleid")
       );
     } else if (roleFilter === "Ansatt") {
       result = result.filter(
         (p) =>
-          (p.recmanCandidate?.isEmployee === true &&
+          p.status === "ACTIVE" &&
+          ((p.recmanCandidate?.isEmployee === true &&
             p.recmanCandidate?.isContractor !== true) ||
-          (!p.recmanCandidate && p.role === "Ansatt")
+            (!p.recmanCandidate && p.role === "Ansatt"))
       );
     }
     return result;
