@@ -109,7 +109,13 @@ export type FindEntriesArgs = {
   where: {
     id?: string;
     changeLogId?: string;
-    runId?: string;
+    /**
+     * Filter via parent ChangeLog. `runId` finnes bare på ChangeLog-modellen,
+     * så for å rulle tilbake alle entries i en kjøring må vi gå via relasjonen.
+     */
+    changeLog?: {
+      runId?: string;
+    };
     rolledBackAt?: null;
   };
 };

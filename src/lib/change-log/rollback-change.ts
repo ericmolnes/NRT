@@ -22,12 +22,18 @@ export async function rollbackChange(
     throw new Error("rollbackChange krever en referanse: entryId, changeLogId eller runId");
   }
 
-  const where: { id?: string; changeLogId?: string; runId?: string; rolledBackAt?: null } = {
+  const where: {
+    id?: string;
+    changeLogId?: string;
+    changeLog?: { runId?: string };
+    rolledBackAt?: null;
+  } = {
     rolledBackAt: null,
   };
   if ("entryId" in ref && ref.entryId) where.id = ref.entryId;
   if ("changeLogId" in ref && ref.changeLogId) where.changeLogId = ref.changeLogId;
-  if ("runId" in ref && ref.runId) where.runId = ref.runId;
+  // `runId` finnes bare på ChangeLog-modellen, så vi filtrerer via relasjonen.
+  if ("runId" in ref && ref.runId) where.changeLog = { runId: ref.runId };
 
   const candidates: ChangeLogEntryRow[] = await client.changeLogEntry.findMany({ where });
 

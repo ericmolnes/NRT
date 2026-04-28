@@ -16,9 +16,12 @@ type StubState = {
   entries: ChangeLogEntryRow[];
 };
 
-function createStub(seed: ChangeLogEntryRow[]): { client: ChangeLogClient; state: StubState } {
+function createStub(
+  seed: ChangeLogEntryRow[],
+  logs: ChangeLogRow[] = []
+): { client: ChangeLogClient; state: StubState } {
   const state: StubState = {
-    logs: [],
+    logs: logs.map((log) => ({ ...log })),
     entries: seed.map((entry) => ({ ...entry })),
   };
 
@@ -41,6 +44,12 @@ function createStub(seed: ChangeLogEntryRow[]): { client: ChangeLogClient; state
           ) {
             return false;
           }
+          if (args.where.changeLog?.runId !== undefined) {
+            const parent = state.logs.find((log) => log.id === entry.changeLogId);
+            if (!parent || parent.runId !== args.where.changeLog.runId) {
+              return false;
+            }
+          }
           if (args.where.rolledBackAt === null && entry.rolledBackAt !== null) {
             return false;
           }
@@ -57,6 +66,19 @@ function createStub(seed: ChangeLogEntryRow[]): { client: ChangeLogClient; state
   };
 
   return { client, state };
+}
+
+function makeLog(partial: Partial<ChangeLogRow>): ChangeLogRow {
+  return {
+    id: partial.id ?? "log_1",
+    actorType: partial.actorType ?? "AI",
+    actorId: partial.actorId ?? null,
+    actorName: partial.actorName ?? null,
+    source: partial.source ?? "AI_ASSISTANT",
+    summary: partial.summary ?? null,
+    runId: partial.runId ?? null,
+    createdAt: partial.createdAt ?? new Date("2026-04-28T10:00:00Z"),
+  };
 }
 
 function makeEntry(partial: Partial<ChangeLogEntryRow>): ChangeLogEntryRow {
@@ -120,6 +142,44 @@ test("rollbackChange ruller tilbake alle entries i en gruppe via changeLogId", a
   // log_99 skal være urørt
   const e3 = state.entries.find((e) => e.id === "e3")!;
   assert.equal(e3.rolledBackAt, null);
+});
+
+test("rollbackChange ruller tilbake alle entries på tvers av flere logger via runId", async () => {
+  // To ChangeLogs som deler samme runId (typisk en AI-batch).
+  const logs = [
+    makeLog({ id: "log_a", runId: "ai_run_42" }),
+    makeLog({ id: "log_b", runId: "ai_run_42" }),
+    makeLog({ id: "log_c", runId: "ai_run_other" }),
+  ];
+  const entries = [
+    makeEntry({ id: "e1", changeLogId: "log_a", field: "email", oldValue: "a", newValue: "b" }),
+    makeEntry({ id: "e2", changeLogId: "log_a", field: "phone", oldValue: "1", newValue: "2" }),
+    makeEntry({ id: "e3", changeLogId: "log_b", field: "name", oldValue: "X", newValue: "Y" }),
+    makeEntry({ id: "e4", changeLogId: "log_c", field: "title", oldValue: "P", newValue: "Q" }),
+  ];
+  const { client, state } = createStub(entries, logs);
+
+  const applied: string[] = [];
+  const applier: RollbackApplier = async (e) => {
+    applied.push(e.id);
+    return true;
+  };
+
+  const result = await rollbackChange(client, { runId: "ai_run_42" }, applier);
+
+  assert.equal(result.rolledBack, 3);
+  assert.deepEqual(result.entryIds.sort(), ["e1", "e2", "e3"]);
+  assert.deepEqual(applied.sort(), ["e1", "e2", "e3"]);
+
+  // Alle tre entries fra runId=ai_run_42 skal ha rolledBackAt satt
+  for (const id of ["e1", "e2", "e3"]) {
+    const entry = state.entries.find((e) => e.id === id)!;
+    assert.notEqual(entry.rolledBackAt, null, `${id} skal være rullet tilbake`);
+  }
+
+  // log_c sin entry skal være urørt
+  const e4 = state.entries.find((e) => e.id === "e4")!;
+  assert.equal(e4.rolledBackAt, null);
 });
 
 test("rollbackChange hopper over allerede tilbakerullede entries", async () => {
