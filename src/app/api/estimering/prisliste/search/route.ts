@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isUser } from "@/lib/rbac";
 import { searchProducts } from "@/lib/queries/products";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Ikke autentisert" }, { status: 401 });
+  }
+  if (!(await isUser())) {
+    return NextResponse.json({ error: "Ikke autorisert" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);

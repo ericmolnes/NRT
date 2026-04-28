@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isUser } from "@/lib/rbac";
 import { getResourcePlanGrid, getResourcePlanLabels } from "@/lib/queries/resource-plan";
 import { getDateRange, formatDate, getWeekNumber } from "@/lib/resource-plan-utils";
 import { NextRequest, NextResponse } from "next/server";
@@ -13,6 +14,9 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Ikke autentisert" }, { status: 401 });
+  }
+  if (!(await isUser())) {
+    return NextResponse.json({ error: "Ikke autorisert" }, { status: 403 });
   }
 
   const params = request.nextUrl.searchParams;

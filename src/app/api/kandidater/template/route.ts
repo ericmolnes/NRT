@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isUser } from "@/lib/rbac";
 import { generateCandidateTemplate } from "@/lib/export/candidate-template";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Ikke autentisert" }, { status: 401 });
+  }
+  if (!(await isUser())) {
+    return NextResponse.json({ error: "Ikke autorisert" }, { status: 403 });
   }
 
   const buffer = await generateCandidateTemplate();

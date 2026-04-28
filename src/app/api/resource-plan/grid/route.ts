@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isUser } from "@/lib/rbac";
 import { getStaffingPlan } from "@/lib/queries/resource-plan";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -6,6 +7,9 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Ikke autentisert" }, { status: 401 });
+  }
+  if (!(await isUser())) {
+    return NextResponse.json({ error: "Ikke autorisert" }, { status: 403 });
   }
 
   const params = request.nextUrl.searchParams;
