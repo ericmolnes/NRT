@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { getCustomers } from "./resources";
 import { syncResource } from "./sync";
+import {
+  getPowerOfficeTenantPoIdWhere,
+  POWER_OFFICE_TENANT_SLUG,
+} from "./config";
 import type { POCustomerResponse } from "./types";
 
 export function syncCustomers(userId: string) {
@@ -9,10 +13,13 @@ export function syncCustomers(userId: string) {
     fetchAll: getCustomers,
     userId,
     upsertItem: async (po) => {
+      const poId = BigInt(po.id);
+
       await db.pOCustomer.upsert({
-        where: { poId: BigInt(po.id) },
+        where: getPowerOfficeTenantPoIdWhere(poId),
         create: {
-          poId: BigInt(po.id),
+          tenantSlug: POWER_OFFICE_TENANT_SLUG,
+          poId,
           code: po.code,
           name: po.name,
           organizationNumber: po.organizationNumber,

@@ -9,7 +9,19 @@ const ENDPOINTS = {
   },
 } as const;
 
+export const POWER_OFFICE_TENANT_SLUG =
+  process.env.POWEROFFICE_TENANT_SLUG ?? "demo-nrt";
+
 export type PowerOfficeEnv = keyof typeof ENDPOINTS;
+
+export function getPowerOfficeTenantPoIdWhere(poId: string | number | bigint) {
+  return {
+    tenantSlug_poId: {
+      tenantSlug: POWER_OFFICE_TENANT_SLUG,
+      poId: BigInt(poId),
+    },
+  };
+}
 
 export interface PowerOfficeConfig {
   applicationKey: string;

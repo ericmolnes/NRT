@@ -1,11 +1,15 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { NextAuthRequest } from "next-auth";
+import type { NextFetchEvent, NextMiddleware } from "next/server";
 
 const { auth } = NextAuth(authConfig);
 
-export default auth((req: NextRequest) => {
+const addSecurityHeaders: (
+  request: NextAuthRequest,
+  event: NextFetchEvent
+) => ReturnType<NextMiddleware> = () => {
   const response = NextResponse.next();
 
   // Security headers
@@ -23,7 +27,11 @@ export default auth((req: NextRequest) => {
   );
 
   return response;
-});
+};
+
+const middleware: NextMiddleware = auth(addSecurityHeaders);
+
+export default middleware;
 
 export const config = {
   matcher: [

@@ -176,3 +176,29 @@ export const tools: ToolDefinition[] = [
 export function getToolsByCategory(categoryId: string): ToolDefinition[] {
   return tools.filter((tool) => tool.category === categoryId);
 }
+
+function normalizePathname(pathname: string): string {
+  if (pathname === "/") return pathname;
+  return pathname.replace(/\/+$/, "");
+}
+
+function matchesToolPath(pathname: string, toolUrl: string): boolean {
+  return pathname === toolUrl || pathname.startsWith(`${toolUrl}/`);
+}
+
+export function getToolForPathname(
+  pathname: string
+): ToolDefinition | undefined {
+  const normalizedPathname = normalizePathname(pathname);
+
+  return [...tools]
+    .filter((tool) => matchesToolPath(normalizedPathname, tool.url))
+    .sort((a, b) => b.url.length - a.url.length)[0];
+}
+
+export function isToolActiveForPathname(
+  tool: ToolDefinition,
+  pathname: string
+): boolean {
+  return getToolForPathname(pathname)?.id === tool.id;
+}

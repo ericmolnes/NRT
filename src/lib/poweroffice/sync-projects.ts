@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { getProjects } from "./resources";
 import { syncResource } from "./sync";
+import {
+  getPowerOfficeTenantPoIdWhere,
+  POWER_OFFICE_TENANT_SLUG,
+} from "./config";
 import type { POProjectResponse } from "./types";
 
 export function syncProjects(userId: string) {
@@ -9,20 +13,22 @@ export function syncProjects(userId: string) {
     fetchAll: getProjects,
     userId,
     upsertItem: async (po) => {
+      const poId = BigInt(po.id);
       // Finn lokal kunde basert på PowerOffice contactId
       let customerId: string | null = null;
       if (po.contactId) {
         const customer = await db.pOCustomer.findUnique({
-          where: { poId: BigInt(po.contactId) },
+          where: getPowerOfficeTenantPoIdWhere(po.contactId),
           select: { id: true },
         });
         customerId = customer?.id ?? null;
       }
 
       await db.pOProject.upsert({
-        where: { poId: BigInt(po.id) },
+        where: getPowerOfficeTenantPoIdWhere(poId),
         create: {
-          poId: BigInt(po.id),
+          tenantSlug: POWER_OFFICE_TENANT_SLUG,
+          poId,
           code: po.code,
           name: po.name,
           description: po.description,

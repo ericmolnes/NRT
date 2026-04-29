@@ -1,6 +1,10 @@
 import { db } from "@/lib/db";
 import { getOutgoingInvoices } from "./resources";
 import { syncResource } from "./sync";
+import {
+  getPowerOfficeTenantPoIdWhere,
+  POWER_OFFICE_TENANT_SLUG,
+} from "./config";
 import type { POOutgoingInvoiceResponse } from "./types";
 
 export function syncInvoices(userId: string) {
@@ -9,20 +13,23 @@ export function syncInvoices(userId: string) {
     fetchAll: getOutgoingInvoices,
     userId,
     upsertItem: async (po) => {
+      const poId = BigInt(po.id);
+
       // Koble til lokal kunde via customerId fra PowerOffice
       let customerId: string | null = null;
       if (po.customerId) {
         const customer = await db.pOCustomer.findUnique({
-          where: { poId: BigInt(po.customerId) },
+          where: getPowerOfficeTenantPoIdWhere(po.customerId),
           select: { id: true },
         });
         customerId = customer?.id ?? null;
       }
 
       await db.pOInvoice.upsert({
-        where: { poId: BigInt(po.id) },
+        where: getPowerOfficeTenantPoIdWhere(poId),
         create: {
-          poId: BigInt(po.id),
+          tenantSlug: POWER_OFFICE_TENANT_SLUG,
+          poId,
           invoiceNumber: po.invoiceNumber,
           status: po.status,
           customerId,
