@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { assertCanModify } from "@/lib/rbac";
 import { createProjectSchema, updateProjectSchema } from "@/lib/validations/project";
 import { createProject as createPOProject } from "@/lib/poweroffice/resources";
+import { POWER_OFFICE_TENANT_SLUG } from "@/lib/poweroffice/config";
 import { revalidatePath } from "next/cache";
 
 export type ActionState = {
@@ -51,6 +52,7 @@ export async function createProject(
 
       const poProject = await db.pOProject.create({
         data: {
+          tenantSlug: POWER_OFFICE_TENANT_SLUG,
           poId: BigInt(poResult.id),
           name: poResult.name ?? project.name,
           code: poResult.code,

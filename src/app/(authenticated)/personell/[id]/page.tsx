@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { DeleteButton } from "@/components/personell/delete-button";
+import { PersonnelDocumentsTab } from "@/components/personell/personnel-documents-tab";
 import { deleteEvaluation, deleteNote } from "@/app/(authenticated)/personell/[id]/actions";
 
 // ─── Type helpers for JSON fields ───
@@ -665,6 +666,20 @@ export default async function PersonnelDetailPage({
               </div>
             </Section>
           )}
+
+          <Section>
+            <SectionTitle
+              icon={FileText}
+              title="Dokumentasjon"
+              count={personnel.documents.length + personnel.courseRecords.length}
+              iconColor="text-blue-600"
+            />
+            <PersonnelDocumentsTab
+              personnelId={personnel.id}
+              documents={personnel.documents}
+              courseRecords={personnel.courseRecords}
+            />
+          </Section>
 
           {/* Arbeidserfaring */}
           {experience.length > 0 && (

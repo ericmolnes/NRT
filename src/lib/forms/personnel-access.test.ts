@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   isPersonnelAllowedForFormLink,
   parsePersonnelIds,
+  toPersonForFilter,
 } from "./personnel-access";
 
 const activeEmployee = {
@@ -176,4 +177,48 @@ test("isPersonnelAllowedForFormLink personnelIds list overrides category filter"
 
   assert.equal(isPersonnelAllowedForFormLink(link, activeEmployee), true);
   assert.equal(isPersonnelAllowedForFormLink(link, candidate), false);
+});
+
+test("toPersonForFilter resolves former employee with open contractor period as INNLEID", () => {
+  const formerEmployeeNowContractor = {
+    id: "person_5",
+    status: "ACTIVE",
+    role: "Ansatt",
+    department: null as string | null,
+    recmanCandidate: {
+      isEmployee: true,
+      isContractor: false,
+      employeeEnd: new Date("2025-01-01T00:00:00Z"),
+      corporationId: "2484",
+      contractorPeriods: [{ endDate: null as Date | null }],
+    },
+  };
+
+  assert.deepEqual(
+    toPersonForFilter(
+      formerEmployeeNowContractor,
+      new Date("2026-04-29T00:00:00Z")
+    ),
+    {
+      id: "person_5",
+      category: "INNLEID",
+      department: "2484",
+    }
+  );
+});
+
+test("toPersonForFilter falls back to Personnel.department for manual personnel", () => {
+  const manualContractor = {
+    id: "person_6",
+    status: "ACTIVE",
+    role: "Innleid",
+    department: "2484",
+    recmanCandidate: null,
+  };
+
+  assert.deepEqual(toPersonForFilter(manualContractor), {
+    id: "person_6",
+    category: "INNLEID",
+    department: "2484",
+  });
 });

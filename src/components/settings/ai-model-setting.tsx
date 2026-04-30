@@ -13,15 +13,22 @@ const MODELS = [
 
 interface AiModelSettingProps {
   currentModel: string;
+  canManage: boolean;
   onSave: (model: string) => Promise<{ success: boolean }>;
 }
 
-export function AiModelSetting({ currentModel, onSave }: AiModelSettingProps) {
+export function AiModelSetting({
+  currentModel,
+  canManage,
+  onSave,
+}: AiModelSettingProps) {
   const [selected, setSelected] = useState(currentModel);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
 
   function handleSave() {
+    if (!canManage) return;
+
     startTransition(async () => {
       const result = await onSave(selected);
       if (result.success) {
@@ -37,7 +44,10 @@ export function AiModelSetting({ currentModel, onSave }: AiModelSettingProps) {
         <button
           key={model.value}
           type="button"
-          onClick={() => setSelected(model.value)}
+          onClick={() => {
+            if (canManage) setSelected(model.value);
+          }}
+          disabled={!canManage}
           className={`w-full text-left rounded-lg border p-3 transition-colors ${
             selected === model.value
               ? "border-blue-500 bg-blue-50 dark:bg-blue-950/20"
@@ -55,7 +65,7 @@ export function AiModelSetting({ currentModel, onSave }: AiModelSettingProps) {
           </div>
         </button>
       ))}
-      {selected !== currentModel && (
+      {canManage && selected !== currentModel && (
         <Button
           size="sm"
           onClick={handleSave}

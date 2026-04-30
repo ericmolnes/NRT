@@ -1,12 +1,21 @@
 "use server";
 
+import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isAdmin, assertAdmin } from "@/lib/rbac";
+import { isAdmin, assertAdmin, assertUser } from "@/lib/rbac";
 import { updatePersonnelSchema } from "@/lib/validations/personnel";
 import { getFormString, getFormStringOptional } from "@/lib/utils";
 import { createNoteSchema } from "@/lib/validations/notes";
 import { createEvaluationSchema, calculateTotalScore, EVALUATION_CRITERIA } from "@/lib/validations/evaluation";
+import { parseCourseDocument } from "@/lib/personell/document-parser";
+import {
+  approveCourseRecord,
+  correctAndApproveCourseRecord,
+  rejectCourseRecord,
+  storePersonnelDocument,
+  type CourseRecordsClient,
+} from "@/lib/personell/course-records";
 import {
   saveFieldValuesSchema,
   createCategorySchema,
@@ -25,6 +34,30 @@ export type ActionState = {
   message?: string;
   success?: boolean;
 };
+
+const MAX_PERSONNEL_DOCUMENT_BYTES = 25 * 1024 * 1024;
+const MAX_TEXT_EXTRACTION_BYTES = 128 * 1024;
+const ALLOWED_PERSONNEL_DOCUMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/plain",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+function isValidIsoDate(value: string | undefined): boolean {
+  return value === undefined || /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function getActor(session: Session) {
+  return {
+    id: session?.user?.id ?? "",
+    name: session?.user?.name ?? session?.user?.email ?? "Ukjent",
+  };
+}
 
 export async function updatePersonnel(
   _prevState: ActionState,
@@ -355,4 +388,162 @@ export async function archivePersonnel(personnelId: string): Promise<ActionState
   revalidatePath("/personell");
   revalidatePath(`/personell/${personnelId}`);
   return { success: true, message: "Personell arkivert" };
+}
+
+export async function uploadPersonnelDocument(
+  _prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth();
+  if (!session?.user) return { message: "Ikke autentisert" };
+  await assertUser();
+
+  const personnelId = getFormString(formData, "personnelId");
+  if (!personnelId) return { errors: { personnelId: ["Mangler personell"] } };
+  const file = formData.get("file");
+  if (!(file instanceof File) || !file.name) {
+    return { errors: { file: ["Velg en fil"] } };
+  }
+  if (file.size > MAX_PERSONNEL_DOCUMENT_BYTES) {
+    return { errors: { file: ["Filen er for stor (maks 25 MB)"] } };
+  }
+  if (file.type && !ALLOWED_PERSONNEL_DOCUMENT_MIME_TYPES.has(file.type)) {
+    return { errors: { file: ["Filtypen er ikke stottet"] } };
+  }
+
+  let text = getFormStringOptional(formData, "documentText") ?? "";
+  if (!text && file.type.startsWith("text/") && file.size <= MAX_TEXT_EXTRACTION_BYTES) {
+    text = await file.text();
+  }
+
+  const parsed = parseCourseDocument({
+    fileName: file.name,
+    text,
+  });
+
+  await storePersonnelDocument(db as unknown as CourseRecordsClient, {
+    personnelId,
+    fileName: file.name,
+    fileUrl: null,
+    mimeType: file.type || null,
+    sizeBytes: file.size || null,
+    uploadedBy: getActor(session),
+    parserStatus: parsed.status,
+    parserSummary: parsed.summary,
+    suggestions: parsed.suggestions,
+  });
+
+  revalidatePath(`/personell/${personnelId}`);
+  return {
+    success: true,
+    message:
+      parsed.suggestions.length > 0
+        ? `Dokument lagret med ${parsed.suggestions.length} kursforslag`
+        : "Dokument lagret uten kursforslag",
+  };
+}
+
+export async function approvePersonnelCourseRecord(
+  _prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth();
+  if (!session?.user) return { message: "Ikke autentisert" };
+  await assertUser();
+
+  const id = getFormString(formData, "id");
+  const personnelId = getFormString(formData, "personnelId");
+  try {
+    await approveCourseRecord(db as unknown as CourseRecordsClient, {
+      id,
+      personnelId,
+      actor: getActor(session),
+    });
+  } catch (error) {
+    return {
+      message: error instanceof Error ? error.message : "Kunne ikke godkjenne kurs",
+    };
+  }
+
+  revalidatePath(`/personell/${personnelId}`);
+  return { success: true, message: "Kurs godkjent" };
+}
+
+export async function correctPersonnelCourseRecord(
+  _prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth();
+  if (!session?.user) return { message: "Ikke autentisert" };
+  await assertUser();
+
+  const id = getFormString(formData, "id");
+  const personnelId = getFormString(formData, "personnelId");
+  const name = getFormString(formData, "name");
+  const issueDate = getFormStringOptional(formData, "issueDate");
+  const expiryDate = getFormStringOptional(formData, "expiryDate");
+
+  if (!name.trim()) return { errors: { name: ["Kursnavn er pakrevd"] } };
+  if (!isValidIsoDate(issueDate)) {
+    return { errors: { issueDate: ["Bruk datoformat YYYY-MM-DD"] } };
+  }
+  if (!isValidIsoDate(expiryDate)) {
+    return { errors: { expiryDate: ["Bruk datoformat YYYY-MM-DD"] } };
+  }
+
+  try {
+    await correctAndApproveCourseRecord(db as unknown as CourseRecordsClient, {
+      id,
+      personnelId,
+      actor: getActor(session),
+      correction: {
+        name,
+        issuer: getFormStringOptional(formData, "issuer") ?? null,
+        certificateNumber:
+          getFormStringOptional(formData, "certificateNumber") ?? null,
+        issueDate: issueDate ?? null,
+        expiryDate: expiryDate ?? null,
+      },
+    });
+  } catch (error) {
+    return {
+      message:
+        error instanceof Error ? error.message : "Kunne ikke korrigere kurs",
+    };
+  }
+
+  revalidatePath(`/personell/${personnelId}`);
+  return { success: true, message: "Kurs korrigert og godkjent" };
+}
+
+export async function rejectPersonnelCourseRecord(
+  _prevState: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const session = await auth();
+  if (!session?.user) return { message: "Ikke autentisert" };
+  await assertUser();
+
+  const id = getFormString(formData, "id");
+  const personnelId = getFormString(formData, "personnelId");
+  const reason = getFormStringOptional(formData, "reason")?.trim();
+  if (!reason) {
+    return { errors: { reason: ["Avvisning krever begrunnelse"] } };
+  }
+
+  try {
+    await rejectCourseRecord(db as unknown as CourseRecordsClient, {
+      id,
+      personnelId,
+      reason,
+      actor: getActor(session),
+    });
+  } catch (error) {
+    return {
+      message: error instanceof Error ? error.message : "Kunne ikke avvise kurs",
+    };
+  }
+
+  revalidatePath(`/personell/${personnelId}`);
+  return { success: true, message: "Kursforslag avvist" };
 }

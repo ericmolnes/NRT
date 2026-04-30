@@ -76,7 +76,14 @@ export type CountNotificationsArgs = {
 };
 
 export type MarkReadArgs = {
-  where: { id: { in: string[] }; readAt: null };
+  where: {
+    id: { in: string[] };
+    readAt: null;
+    OR?: Array<{
+      targetUserId?: string;
+      targetLevel?: AccessLevel;
+    }>;
+  };
   data: { readAt: Date };
 };
 

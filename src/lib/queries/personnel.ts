@@ -125,6 +125,8 @@ export async function getPersonnelById(id: string) {
         orderBy: { createdAt: "desc" },
       },
       notes: { orderBy: { createdAt: "desc" } },
+      documents: { orderBy: { uploadedAt: "desc" } },
+      courseRecords: { orderBy: [{ status: "asc" }, { expiryDate: "asc" }] },
       fieldValues: {
         include: {
           field: { include: { category: true } },

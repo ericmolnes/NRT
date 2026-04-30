@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { assertCanModify } from "@/lib/rbac";
 import { createCustomerSchema, updateCustomerSchema, createContactSchema } from "@/lib/validations/customer";
 import { createCustomer as createPOCustomer, updateCustomer as updatePOCustomer } from "@/lib/poweroffice/resources";
+import { POWER_OFFICE_TENANT_SLUG } from "@/lib/poweroffice/config";
 import { revalidatePath } from "next/cache";
 
 export type ActionState = {
@@ -46,6 +47,7 @@ export async function createCustomer(
 
       const poCustomer = await db.pOCustomer.create({
         data: {
+          tenantSlug: POWER_OFFICE_TENANT_SLUG,
           poId: BigInt(poResult.id),
           name: poResult.name ?? customer.name,
           organizationNumber: poResult.organizationNumber,

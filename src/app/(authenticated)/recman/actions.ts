@@ -3,7 +3,7 @@
 import { auth } from "@/lib/auth";
 import { assertAdmin } from "@/lib/rbac";
 import { db } from "@/lib/db";
-import { syncAllCandidates, syncAllRecman } from "@/lib/recman/sync";
+import { syncAllRecman } from "@/lib/recman/sync";
 import { revalidatePath } from "next/cache";
 import { type Prisma } from "@/generated/prisma/client";
 import { SKILL_CATEGORIES } from "@/lib/recman/types";
@@ -25,6 +25,7 @@ export type RecmanSyncActionResult = {
 export async function triggerRecmanSync(): Promise<RecmanSyncActionResult> {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Ikke autentisert");
+  await assertAdmin();
 
   const result = await syncAllRecman(session.user.id);
   revalidatePath("/personell");

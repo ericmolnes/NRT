@@ -17,9 +17,16 @@ import {
   emptySyncResult,
   mergeSyncResults,
   notifySyncResult,
+  processSyncDiagnosis,
   type SyncQueueClient,
   type SyncResult,
 } from "@/lib/sync/sync-queue";
+import {
+  buildRecmanCandidateSyncPlan,
+  deriveRecmanCandidateEmployeeState,
+  serializeRecmanCandidateBase,
+  type RecmanCandidateSyncShape,
+} from "./candidate-sync";
 
 /**
  * Full Recman sync: candidates → companies → projects → jobs
@@ -94,10 +101,11 @@ export async function syncAllCandidates(triggeredBy: string) {
     const candidates = await getAllCandidates(CANDIDATE_ALL_FIELDS);
     let synced = 0;
     let failed = 0;
+    const perRecord: SyncResult[] = [];
 
     for (const c of candidates) {
       try {
-        await upsertCandidate(c);
+        perRecord.push(await upsertCandidate(c));
         synced++;
       } catch (e) {
         console.error(`Feil ved synk av ${c.firstName} ${c.lastName}:`, e);
@@ -125,7 +133,7 @@ export async function syncAllCandidates(triggeredBy: string) {
       total: candidates.length,
       synced,
       failed,
-      conflicts: emptySyncResult(),
+      conflicts: mergeSyncResults(perRecord),
     };
   } catch (e) {
     await db.recmanSyncLog.update({
@@ -167,7 +175,78 @@ function mapCertifications(
   });
 }
 
-async function upsertCandidate(c: RecmanCandidate) {
+const RECMAN_CANDIDATE_SYNC_SELECT = {
+  id: true,
+  personnelId: true,
+  rawJson: true,
+  corporationId: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  mobilePhone: true,
+  address: true,
+  postalCode: true,
+  postalPlace: true,
+  city: true,
+  country: true,
+  nationality: true,
+  gender: true,
+  dob: true,
+  title: true,
+  description: true,
+  rating: true,
+  imageUrl: true,
+  linkedIn: true,
+  isEmployee: true,
+  employeeNumber: true,
+  employeeStart: true,
+  employeeEnd: true,
+  skills: true,
+  education: true,
+  experience: true,
+  projectExperience: true,
+  courses: true,
+  relatives: true,
+  attributes: true,
+  languages: true,
+  driversLicense: true,
+  references: true,
+  files: true,
+  recmanCreated: true,
+  recmanUpdated: true,
+} satisfies Prisma.RecmanCandidateSelect;
+
+const RECMAN_CANDIDATE_AFTER_SYNC_SELECT = {
+  id: true,
+  personnelId: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  mobilePhone: true,
+  title: true,
+  isEmployee: true,
+  employeeEnd: true,
+} satisfies Prisma.RecmanCandidateSelect;
+
+type RecmanCandidateSyncRow = {
+  id: string;
+  personnelId: string | null;
+  rawJson: string | null;
+} & RecmanCandidateSyncShape;
+
+function toCandidateSyncShape(
+  row: RecmanCandidateSyncRow
+): RecmanCandidateSyncShape {
+  const shape: RecmanCandidateSyncShape = { ...row };
+  delete shape["id"];
+  delete shape["personnelId"];
+  delete shape["rawJson"];
+  return shape;
+}
+
+async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
   const hasEmployee = !!c.employee?.startDate;
   const isActive = hasEmployee && !c.employee?.endDate;
 
@@ -219,29 +298,86 @@ async function upsertCandidate(c: RecmanCandidate) {
     })),
     recmanCreated: c.created ? new Date(c.created) : null,
     recmanUpdated: c.updated ? new Date(c.updated) : null,
-    lastSyncedAt: new Date(),
   };
 
-  const candidate = await db.recmanCandidate.upsert({
+  const existing = await db.recmanCandidate.findUnique({
     where: { recmanId: c.candidateId },
-    create: {
-      recmanId: c.candidateId,
-      ...candidateData,
-    },
-    update: candidateData,
-    select: { id: true, personnelId: true },
+    select: RECMAN_CANDIDATE_SYNC_SELECT,
   });
+
+  const now = new Date();
+  let syncResult = emptySyncResult();
+  let candidate: {
+    id: string;
+    personnelId: string | null;
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+    mobilePhone: string | null;
+    title: string | null;
+    isEmployee: boolean;
+    employeeEnd: Date | null;
+  };
+
+  if (!existing) {
+    candidate = await db.recmanCandidate.create({
+      data: {
+        recmanId: c.candidateId,
+        ...candidateData,
+        rawJson: serializeRecmanCandidateBase(candidateData),
+        lastSyncedAt: now,
+      },
+      select: RECMAN_CANDIDATE_AFTER_SYNC_SELECT,
+    });
+    syncResult.applied = 1;
+  } else {
+    const syncPlan = buildRecmanCandidateSyncPlan({
+      local: toCandidateSyncShape(existing as unknown as RecmanCandidateSyncRow),
+      remote: candidateData,
+      baseRawJson: existing.rawJson,
+    });
+    const safeFieldUpdates: Record<string, unknown> = {};
+
+    syncResult = await processSyncDiagnosis(db as unknown as SyncQueueClient, {
+      source: "RECMAN",
+      model: "RecmanCandidate",
+      recordId: existing.id,
+      diagnosis: syncPlan.diagnosis,
+      applyChange: async (field, value) => {
+        safeFieldUpdates[field] = value;
+      },
+    });
+
+    const updateData: Record<string, unknown> = {
+      ...safeFieldUpdates,
+      lastSyncedAt: now,
+    };
+    if (syncPlan.nextBaseRawJson !== null) {
+      updateData.rawJson = syncPlan.nextBaseRawJson;
+    }
+
+    candidate = await db.recmanCandidate.update({
+      where: { id: existing.id },
+      data: updateData,
+      select: RECMAN_CANDIDATE_AFTER_SYNC_SELECT,
+    });
+  }
+
+  const employeeState = deriveRecmanCandidateEmployeeState(candidate);
 
   // Auto-match or create Personnel for ALL synced candidates.
   // Status- og role-oppdatering basert på Recman-employee-data gjøres kun
   // for ansatte; innleide- og kandidat-status styres manuelt i NRT.
   if (!candidate.personnelId) {
     const personnelId = await findOrCreatePersonnel({
-      firstName: c.firstName,
-      lastName: c.lastName,
-      email: c.email || undefined,
-      phone: c.mobilePhone || c.phone || undefined,
-      role: hasEmployee ? c.title || "Ansatt" : c.title || "Kandidat",
+      firstName: candidate.firstName,
+      lastName: candidate.lastName,
+      email: candidate.email || undefined,
+      phone: candidate.mobilePhone || candidate.phone || undefined,
+      role: employeeState.hasEmployee
+        ? candidate.title || "Ansatt"
+        : candidate.title || "Kandidat",
     });
 
     await db.recmanCandidate.update({
@@ -249,30 +385,30 @@ async function upsertCandidate(c: RecmanCandidate) {
       data: { personnelId },
     });
 
-    if (hasEmployee) {
-      const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
-      if (targetStatus !== "ACTIVE") {
+    if (employeeState.targetStatus) {
+      if (employeeState.targetStatus !== "ACTIVE") {
         await db.personnel.update({
           where: { id: personnelId },
-          data: { status: targetStatus },
+          data: { status: employeeState.targetStatus },
         });
       }
     }
-  } else if (hasEmployee) {
+  } else if (employeeState.targetStatus) {
     await enrichPersonnel(candidate.personnelId, {
-      phone: c.mobilePhone || c.phone,
+      phone: candidate.mobilePhone || candidate.phone,
     });
 
-    const targetStatus = isActive ? "ACTIVE" : "INACTIVE";
     const current = await db.personnel.findUnique({
       where: { id: candidate.personnelId },
       select: { status: true },
     });
-    if (current && current.status !== targetStatus) {
+    if (current && current.status !== employeeState.targetStatus) {
       await db.personnel.update({
         where: { id: candidate.personnelId },
-        data: { status: targetStatus },
+        data: { status: employeeState.targetStatus },
       });
     }
   }
+
+  return syncResult;
 }

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
+import { buildEvaluationRoleWhere } from "./evaluation-personnel-filters";
 
 interface EvaluationFilters {
   search?: string;
@@ -14,7 +15,7 @@ export async function getEvaluations(filters?: EvaluationFilters) {
     ...(filters?.search
       ? { name: { contains: filters.search, mode: "insensitive" } }
       : {}),
-    ...roleFilterWhere(filters?.role),
+    ...buildEvaluationRoleWhere(filters?.role),
   };
   if (Object.keys(personnelWhere).length > 0) {
     where.personnel = personnelWhere;
@@ -61,41 +62,23 @@ export async function getEvaluationStats() {
   };
 }
 
-function roleFilterWhere(
-  roleFilter?: string | null
-): Prisma.PersonnelWhereInput {
-  if (!roleFilter) return {};
-  if (roleFilter === "Innleid") {
-    return {
-      OR: [
-        { recmanCandidate: { isContractor: true } },
-        { recmanCandidate: null, role: "Innleid" },
-      ],
-    };
-  }
-  if (roleFilter === "Ansatt") {
-    return {
-      OR: [
-        { recmanCandidate: { isEmployee: true, isContractor: false } },
-        { recmanCandidate: null, role: "Ansatt" },
-      ],
-    };
-  }
-  return { role: roleFilter };
-}
-
 export async function getAllPersonnel(roleFilter?: string | null) {
   return db.personnel.findMany({
     select: {
       id: true,
       name: true,
       role: true,
+      department: true,
       status: true,
       recmanCandidate: {
         select: {
           corporationId: true,
           isContractor: true,
           isEmployee: true,
+          employeeEnd: true,
+          contractorPeriods: {
+            select: { endDate: true },
+          },
         },
       },
     },
@@ -110,7 +93,7 @@ export async function getAllPersonnel(roleFilter?: string | null) {
             },
           ],
         },
-        roleFilterWhere(roleFilter),
+        buildEvaluationRoleWhere(roleFilter),
       ],
     },
     orderBy: { name: "asc" },
@@ -123,7 +106,7 @@ export async function getPersonnelForPublicForm(roleFilter?: string | null) {
     select: { id: true, name: true, role: true },
     where: {
       status: { not: "ARCHIVED" },
-      ...roleFilterWhere(roleFilter),
+      ...buildEvaluationRoleWhere(roleFilter),
     },
     orderBy: { name: "asc" },
   });
@@ -227,7 +210,7 @@ export async function getGroupedEvaluations(
     ...(filters?.search
       ? { name: { contains: filters.search, mode: "insensitive" } }
       : {}),
-    ...roleFilterWhere(filters?.role),
+    ...buildEvaluationRoleWhere(filters?.role),
   };
 
   const personnel = await db.personnel.findMany({

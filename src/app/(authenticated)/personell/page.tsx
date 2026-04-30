@@ -1,9 +1,9 @@
 import { Suspense } from "react";
 import {
-  getPersonnelList,
   getPersonnelSyncStats,
   getDistinctDepartments,
 } from "@/lib/queries/personnel";
+import { getPersonnelishList } from "@/lib/queries/personnel-list";
 import {
   Card,
   CardContent,
@@ -21,7 +21,7 @@ interface PageProps {
     search?: string;
     department?: string;
     status?: string;
-    sync?: string;
+    sync?: "po" | "recman" | "unlinked";
     category?: "ANSATT" | "INNLEID" | "KANDIDAT";
   }>;
 }
@@ -30,12 +30,13 @@ export default async function PersonnelPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const [stats, personnel, departments] = await Promise.all([
     getPersonnelSyncStats(),
-    getPersonnelList({
+    getPersonnelishList({
       search: params.search,
       department: params.department,
       status: params.status,
       syncStatus: params.sync,
       category: params.category,
+      includeUnpersonneledCandidates: false,
     }),
     getDistinctDepartments(),
   ]);

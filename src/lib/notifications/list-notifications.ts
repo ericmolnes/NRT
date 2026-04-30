@@ -74,13 +74,22 @@ export async function countUnreadForUser(
 
 export async function markAsRead(
   client: NotificationClient,
-  ids: string[]
+  ids: string[],
+  audience: { userId: string | null; accessLevel: AccessLevel }
 ): Promise<void> {
   if (ids.length === 0) return;
+  const where: {
+    id: { in: string[] };
+    readAt: null;
+    OR?: Array<{ targetUserId?: string; targetLevel?: AccessLevel }>;
+  } = { id: { in: ids }, readAt: null };
+
+  where.OR = buildAudienceWhere(audience).OR;
+
   // Vi filtrerer på `readAt: null` slik at vi ikke overskriver et eldre
   // tidspunkt hvis raden allerede er lest. Idempotent.
   await client.systemNotification.updateMany({
-    where: { id: { in: ids }, readAt: null },
+    where,
     data: { readAt: new Date() },
   });
 }

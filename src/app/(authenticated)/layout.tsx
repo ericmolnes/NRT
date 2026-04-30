@@ -60,7 +60,7 @@ export default async function AuthenticatedLayout({
 
   return (
     <SidebarProvider>
-      <AppSidebar user={session.user} />
+      <AppSidebar user={session.user} accessLevel={level} />
       <SidebarInset>
         <AppHeader
           user={session.user}

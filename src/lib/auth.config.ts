@@ -1,5 +1,13 @@
 import type { NextAuthConfig } from "next-auth";
 
+export function isPublicAuthPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/s/") ||
+    pathname === "/api/form-auth/verify-password"
+  );
+}
+
 export const authConfig: NextAuthConfig = {
   pages: {
     signIn: "/login",
@@ -7,9 +15,7 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isOnPublicPage =
-        nextUrl.pathname.startsWith("/login") ||
-        nextUrl.pathname.startsWith("/s/");
+      const isOnPublicPage = isPublicAuthPath(nextUrl.pathname);
 
       if (isOnPublicPage) {
         if (isLoggedIn && nextUrl.pathname.startsWith("/login"))

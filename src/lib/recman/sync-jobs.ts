@@ -2,6 +2,33 @@ import { db } from "@/lib/db";
 import { getAllJobs } from "./client";
 import { getOrCreateResourcePlan } from "@/lib/queries/resource-plan";
 
+type RecmanJobAllocationDataInput = {
+  entryId: string;
+  jobAssignmentId: string;
+  startDate: Date;
+  endDate: Date | null;
+  label: string;
+};
+
+export function buildRecmanJobAllocationData({
+  entryId,
+  jobAssignmentId,
+  startDate,
+  endDate,
+  label,
+}: RecmanJobAllocationDataInput) {
+  if (!endDate) return null;
+
+  return {
+    entryId,
+    jobAssignmentId,
+    startDate,
+    endDate,
+    label,
+    source: "JOB_GENERATED" as const,
+  };
+}
+
 export async function syncRecmanJobs(triggeredBy: string) {
   const jobs = await getAllJobs();
   let synced = 0;
@@ -18,6 +45,7 @@ export async function syncRecmanJobs(triggeredBy: string) {
         select: { personnelId: true },
       });
       if (!candidate?.personnelId) continue;
+      const personnelId = candidate.personnelId;
 
       // Find NRT Project via recmanProjectId
       const project = await db.project.findFirst({
@@ -62,65 +90,80 @@ export async function syncRecmanJobs(triggeredBy: string) {
         where: {
           jobId_personnelId: {
             jobId: nrtJob.id,
-            personnelId: candidate.personnelId,
+            personnelId,
           },
         },
       });
 
-      if (!existingAssignment) {
-        await db.jobAssignment.create({
+      const assignment =
+        existingAssignment ??
+        (await db.jobAssignment.create({
           data: {
             jobId: nrtJob.id,
-            personnelId: candidate.personnelId,
+            personnelId,
             startDate: new Date(rJob.startDate),
             endDate: rJob.endDate ? new Date(rJob.endDate) : null,
             isActive: true,
           },
-        });
+        }));
 
-        // Create ResourcePlanEntry for this person
-        const year = new Date(rJob.startDate).getFullYear();
-        const plan = await getOrCreateResourcePlan(
-          year,
-          triggeredBy,
-          "Recman Sync"
-        );
+      // Ensure the Recman assignment is visible in the yearly resource plan.
+      const year = new Date(rJob.startDate).getFullYear();
+      const plan = await getOrCreateResourcePlan(
+        year,
+        triggeredBy,
+        "Recman Sync"
+      );
 
-        const existingEntry = await db.resourcePlanEntry.findFirst({
-          where: { resourcePlanId: plan.id, personnelId: candidate.personnelId },
-        });
+      const existingEntry = await db.resourcePlanEntry.findFirst({
+        where: { resourcePlanId: plan.id, personnelId },
+      });
 
-        if (!existingEntry) {
-          const person = await db.personnel.findUnique({
-            where: { id: candidate.personnelId },
-            select: { name: true },
-          });
+      const entry =
+        existingEntry ??
+        (await (async () => {
+          const [person, entryCount] = await Promise.all([
+            db.personnel.findUnique({
+              where: { id: personnelId },
+              select: { name: true },
+            }),
+            db.resourcePlanEntry.count({
+              where: { resourcePlanId: plan.id },
+            }),
+          ]);
 
-          const entryCount = await db.resourcePlanEntry.count({
-            where: { resourcePlanId: plan.id },
-          });
-
-          const entry = await db.resourcePlanEntry.create({
+          return db.resourcePlanEntry.create({
             data: {
               resourcePlanId: plan.id,
-              personnelId: candidate.personnelId,
+              personnelId,
               displayName: person?.name ?? "Ukjent",
               sortOrder: entryCount,
             },
           });
+        })());
 
-          // Create allocation for the job period
-          if (rJob.startDate && rJob.endDate) {
-            await db.resourceAllocation.create({
-              data: {
-                entryId: entry.id,
-                startDate: new Date(rJob.startDate),
-                endDate: new Date(rJob.endDate),
-                label: nrtJob.resourcePlanLabelName ?? rJob.name,
-                source: "JOB_GENERATED",
-              },
-            });
-          }
+      const allocationData = buildRecmanJobAllocationData({
+        entryId: entry.id,
+        jobAssignmentId: assignment.id,
+        startDate: new Date(rJob.startDate),
+        endDate: rJob.endDate ? new Date(rJob.endDate) : null,
+        label: nrtJob.resourcePlanLabelName ?? rJob.name,
+      });
+
+      if (allocationData) {
+        const existingAllocation = await db.resourceAllocation.findFirst({
+          where: {
+            jobAssignmentId: assignment.id,
+            source: "JOB_GENERATED",
+            startDate: allocationData.startDate,
+            endDate: allocationData.endDate,
+            label: allocationData.label,
+          },
+          select: { id: true },
+        });
+
+        if (!existingAllocation) {
+          await db.resourceAllocation.create({ data: allocationData });
         }
       }
     } catch (e) {

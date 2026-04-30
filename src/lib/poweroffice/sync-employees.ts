@@ -10,7 +10,6 @@ import {
   findOrCreatePersonnel,
   enrichPersonnel,
 } from "@/lib/personnel-matcher";
-import { diagnoseFields } from "@/lib/sync/conflict-detector";
 import {
   emptySyncResult,
   mergeSyncResults,
@@ -19,48 +18,7 @@ import {
   type SyncQueueClient,
   type SyncResult,
 } from "@/lib/sync/sync-queue";
-
-// Felter vi sammenligner mellom lokal POEmployee, base (rawJson fra forrige
-// sync) og ny remote payload. Resten av feltene er enten metadata
-// (lastSyncedAt, code) eller styres ikke fra dette laget.
-const COMPARED_FIELDS = [
-  "firstName",
-  "lastName",
-  "email",
-  "phone",
-  "department",
-  "jobTitle",
-  "isActive",
-] as const;
-
-// Felter på POEmployee-modellen er ikke nøyaktig like de fra PowerOffice.
-// Vi mapper PO-payload (både fersk og base) til samme felt-sett som
-// lokalbasen bruker, slik at detektoren kan sammenligne direkte.
-function mapPoToLocalShape(
-  po: POEmployeeResponse | Record<string, unknown> | null
-): Record<string, unknown> | null {
-  if (!po) return null;
-  const p = po as POEmployeeResponse & Record<string, unknown>;
-  return {
-    firstName: p.firstName ?? null,
-    lastName: p.lastName ?? null,
-    email: p.emailAddress ?? null,
-    phone: p.phoneNumber ?? null,
-    department: p.departmentCode ?? null,
-    jobTitle: p.jobTitle ?? null,
-    isActive: p.isActive ?? null,
-  };
-}
-
-function parseBase(rawJson: string | null): Record<string, unknown> | null {
-  if (!rawJson) return null;
-  try {
-    const parsed = JSON.parse(rawJson) as Record<string, unknown>;
-    return mapPoToLocalShape(parsed);
-  } catch {
-    return null;
-  }
-}
+import { buildPowerOfficeEmployeeSyncPlan } from "./employee-sync-base";
 
 // Mapper feltnavn fra lokal POEmployee-shape til Prisma-update-input.
 // Brukes inne i applyChange når en safe-remote endring skal skrives.
@@ -106,7 +64,6 @@ export async function syncEmployees(userId: string) {
         },
       });
 
-      const remoteShape = mapPoToLocalShape(po);
       const localShape = existing
         ? {
             firstName: existing.firstName,
@@ -118,13 +75,10 @@ export async function syncEmployees(userId: string) {
             isActive: existing.isActive,
           }
         : null;
-      const baseShape = existing ? parseBase(existing.rawJson) : null;
-
-      const diagnosis = diagnoseFields({
+      const syncPlan = buildPowerOfficeEmployeeSyncPlan({
         local: localShape,
-        remote: remoteShape,
-        base: baseShape,
-        fields: [...COMPARED_FIELDS],
+        remote: po,
+        baseRawJson: existing?.rawJson,
       });
 
       // Diagnostiseringen styrer hvilke felt som faktisk skrives.
@@ -137,7 +91,7 @@ export async function syncEmployees(userId: string) {
         source: "POWEROFFICE",
         model: "POEmployee",
         recordId: existing?.id ?? `po:${po.id}`,
-        diagnosis,
+        diagnosis: syncPlan.diagnosis,
         applyChange: async (field, value) => {
           // Vi samler trygge feltskriv i ett objekt og applyer dem under
           // ett upsert/update-kall etterpå. Det reduserer DB-rundturer.
@@ -169,10 +123,9 @@ export async function syncEmployees(userId: string) {
         update: {
           ...safeFieldUpdates,
           code: po.code,
-          // rawJson og lastSyncedAt oppdateres alltid: rawJson er vår
-          // base for neste sync, lastSyncedAt er metadata. Selve felt-
-          // verdiene styres av safeFieldUpdates over.
-          rawJson: JSON.stringify(po),
+          // rawJson er basen for neste sync. Konfliktfelt beholder gammel
+          // baseverdi, mens trygge remote-felt kan avansere.
+          rawJson: syncPlan.nextBaseRawJson,
           lastSyncedAt: new Date(),
         },
         select: { id: true, personnelId: true },

@@ -48,21 +48,14 @@ function resolveDepartment(personnel: PersonnelAccessRecord): string | null {
   return personnel.recmanCandidate?.corporationId ?? personnel.department;
 }
 
-export function isPersonnelAllowedForFormLink(
-  link: FormLinkAccess,
+export function toPersonForFilter(
   personnel: PersonnelAccessRecord,
   now: Date = new Date()
-): boolean {
-  if (personnel.status === "ARCHIVED") return false;
-
-  // Behold den enkle "single person lock" som hovedinngangen — den bypasser
-  // alle andre filtre og er en eksplisitt 1:1-mapping.
-  if (link.personnelId) {
-    return personnel.id === link.personnelId;
-  }
-
-  const filters = parseLinkFilters(link);
-
+): {
+  id: string;
+  category: "ANSATT" | "INNLEID" | "KANDIDAT";
+  department: string | null;
+} {
   const rc = personnel.recmanCandidate ?? null;
   const hasOpenPeriod =
     rc?.contractorPeriods?.some((p) => p.endDate === null) ?? false;
@@ -79,12 +72,26 @@ export function isPersonnelAllowedForFormLink(
     now,
   });
 
-  return isPersonAllowed(
-    {
-      id: personnel.id,
-      category,
-      department: resolveDepartment(personnel),
-    },
-    filters
-  );
+  return {
+    id: personnel.id,
+    category,
+    department: resolveDepartment(personnel),
+  };
+}
+
+export function isPersonnelAllowedForFormLink(
+  link: FormLinkAccess,
+  personnel: PersonnelAccessRecord,
+  now: Date = new Date()
+): boolean {
+  if (personnel.status === "ARCHIVED") return false;
+
+  // Behold den enkle "single person lock" som hovedinngangen — den bypasser
+  // alle andre filtre og er en eksplisitt 1:1-mapping.
+  if (link.personnelId) {
+    return personnel.id === link.personnelId;
+  }
+
+  const filters = parseLinkFilters(link);
+  return isPersonAllowed(toPersonForFilter(personnel, now), filters);
 }

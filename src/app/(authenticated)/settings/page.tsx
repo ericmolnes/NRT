@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth";
-import { isAdmin } from "@/lib/rbac";
 import { db } from "@/lib/db";
 import { getAiModel } from "@/lib/ai/get-ai-model";
+import { resolveAccessForUser } from "@/lib/access/get-current-access";
+import { resolveUserCapabilities } from "@/lib/assistant/resolve-user-capabilities";
 import {
   Card,
   CardContent,
@@ -14,6 +15,7 @@ import { SyncButton as RecmanSyncButton } from "@/components/recman/sync-button"
 import { AiModelSetting } from "@/components/settings/ai-model-setting";
 import { AccessRequestsPanel } from "@/components/settings/access-requests-panel";
 import { NotificationsPanel } from "@/components/settings/notifications-panel";
+import { SyncConflictsPanel } from "@/components/settings/sync-conflicts-panel";
 import { saveAiModel } from "./actions";
 import {
   User,
@@ -32,7 +34,13 @@ import {
 } from "lucide-react";
 
 export default async function SettingsPage() {
-  const [session, admin] = await Promise.all([auth(), isAdmin()]);
+  const session = await auth();
+  const access = await resolveAccessForUser(session?.user ?? null);
+  const capabilities = resolveUserCapabilities(access.level);
+  const admin = access.level === "ADMIN";
+  const canManageAiModel = capabilities.allowedActionIds.includes(
+    "settings.aiModel.update"
+  );
   const user = session?.user;
 
   const initials =
@@ -77,7 +85,7 @@ export default async function SettingsPage() {
     : null;
 
   // Current AI model
-  const currentAiModel = admin ? await getAiModel() : null;
+  const currentAiModel = canManageAiModel ? await getAiModel() : null;
 
   // Latest sync logs
   const syncLogs = admin
@@ -181,7 +189,7 @@ export default async function SettingsPage() {
         </div>
         <NotificationsPanel
           userId={user?.id ?? null}
-          accessLevel={admin ? "ADMIN" : "USER"}
+          accessLevel={access.level}
         />
       </section>
 
@@ -302,11 +310,13 @@ export default async function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+
+          <SyncConflictsPanel />
         </section>
       )}
 
       {/* ─── Admin: AI-modell ─── */}
-      {admin && currentAiModel && (
+      {canManageAiModel && currentAiModel && (
         <section className="space-y-3">
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-purple-600" />
@@ -327,7 +337,11 @@ export default async function SettingsPage() {
               <p className="text-xs text-muted-foreground mb-3">
                 Velg hvilken Claude-modell som brukes til AI-matching ved import av kandidater.
               </p>
-              <AiModelSetting currentModel={currentAiModel} onSave={saveAiModel} />
+              <AiModelSetting
+                currentModel={currentAiModel}
+                canManage={canManageAiModel}
+                onSave={saveAiModel}
+              />
             </CardContent>
           </Card>
         </section>

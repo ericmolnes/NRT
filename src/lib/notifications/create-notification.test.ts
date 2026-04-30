@@ -92,10 +92,24 @@ function createStub(): { client: NotificationClient; state: StubState } {
       async updateMany(args: MarkReadArgs) {
         let count = 0;
         for (const row of state.rows) {
+          const audienceMatches =
+            !args.where.OR ||
+            args.where.OR.length === 0 ||
+            args.where.OR.some((branch) => {
+              if (branch.targetUserId !== undefined) {
+                return row.targetUserId === branch.targetUserId;
+              }
+              if (branch.targetLevel !== undefined) {
+                return row.targetLevel === branch.targetLevel;
+              }
+              return false;
+            });
+
           if (
             args.where.id.in.includes(row.id) &&
             args.where.readAt === null &&
-            row.readAt === null
+            row.readAt === null &&
+            audienceMatches
           ) {
             row.readAt = args.data.readAt;
             count++;
@@ -326,12 +340,48 @@ test("markAsRead markerer kun de spesifiserte ID-ene", async () => {
     targetUserId: "user_42",
   });
 
-  await markAsRead(client, [a.id]);
+  await markAsRead(client, [a.id], {
+    userId: "user_42",
+    accessLevel: "USER",
+  });
 
   const aRow = state.rows.find((r) => r.id === a.id)!;
   const bRow = state.rows.find((r) => r.id === b.id)!;
   assert.notEqual(aRow.readAt, null);
   assert.equal(bRow.readAt, null);
+});
+
+test("markAsRead markerer bare varsler som tilhorer mottaker-scope", async () => {
+  const { client, state } = createStub();
+
+  const mine = await createNotification(client, {
+    kind: "GENERIC",
+    title: "Min",
+    targetUserId: "user_42",
+  });
+  const adminBroadcast = await createNotification(client, {
+    kind: "GENERIC",
+    title: "Admin",
+    targetLevel: "ADMIN",
+  });
+  const other = await createNotification(client, {
+    kind: "GENERIC",
+    title: "Annen",
+    targetUserId: "user_99",
+  });
+
+  await markAsRead(client, [mine.id, adminBroadcast.id, other.id], {
+    userId: "user_42",
+    accessLevel: "ADMIN",
+  });
+
+  const mineRow = state.rows.find((r) => r.id === mine.id)!;
+  const adminRow = state.rows.find((r) => r.id === adminBroadcast.id)!;
+  const otherRow = state.rows.find((r) => r.id === other.id)!;
+
+  assert.notEqual(mineRow.readAt, null);
+  assert.notEqual(adminRow.readAt, null);
+  assert.equal(otherRow.readAt, null);
 });
 
 test("markAsRead er idempotent (overskriver ikke gammelt readAt)", async () => {
@@ -345,14 +395,20 @@ test("markAsRead er idempotent (overskriver ikke gammelt readAt)", async () => {
   const original = new Date("2026-04-01T12:00:00Z");
   state.rows[0].readAt = original;
 
-  await markAsRead(client, [a.id]);
+  await markAsRead(client, [a.id], {
+    userId: "user_42",
+    accessLevel: "USER",
+  });
 
   assert.equal(state.rows[0].readAt!.getTime(), original.getTime());
 });
 
 test("markAsRead på tom liste er no-op", async () => {
   const { client } = createStub();
-  await markAsRead(client, []); // Skal ikke kaste eller røre noe
+  await markAsRead(client, [], {
+    userId: "user_42",
+    accessLevel: "USER",
+  }); // Skal ikke kaste eller røre noe
 });
 
 // ─── sendAccessRequestEmailWithTransport ────────────────────────────

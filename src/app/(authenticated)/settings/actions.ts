@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { createNotification } from "@/lib/notifications/create-notification";
 import { markAsRead } from "@/lib/notifications/list-notifications";
 import type { NotificationClient } from "@/lib/notifications/types";
+import { resolveAccessForUser } from "@/lib/access/get-current-access";
 
 export async function saveAiModel(model: string) {
   const session = await auth();
@@ -276,7 +277,11 @@ export async function markNotificationsRead(ids: string[]) {
 
   if (!Array.isArray(ids) || ids.length === 0) return { ok: true };
 
-  await markAsRead(db as unknown as NotificationClient, ids);
+  const access = await resolveAccessForUser(session.user);
+  await markAsRead(db as unknown as NotificationClient, ids, {
+    userId: session.user.id,
+    accessLevel: access.level,
+  });
   revalidatePath("/settings");
   return { ok: true };
 }

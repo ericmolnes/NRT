@@ -31,6 +31,8 @@ model Personnel {
   evaluationLinks     EvaluationLink[]
   fieldValues         FieldValue[]
   notes               Note[]
+  documents           PersonnelDocument[]
+  courseRecords       PersonnelCourseRecord[]
   poEmployee          POEmployee?
   recmanCandidate     RecmanCandidate?
   resourcePlanEntries ResourcePlanEntry[]
@@ -123,6 +125,58 @@ model Note {
 
   @@index([personnelId])
   @@index([createdAt])
+}
+
+model PersonnelDocument {
+  id             String                        @id @default(cuid())
+  personnelId    String
+  personnel      Personnel                     @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  fileName       String
+  fileUrl        String?
+  mimeType       String?
+  sizeBytes      Int?
+  uploadedById   String
+  uploadedByName String
+  uploadedAt     DateTime                      @default(now())
+  parserStatus   PersonnelDocumentParserStatus @default(NOT_RUN)
+  parserSummary  String?
+  courseRecords  PersonnelCourseRecord[]
+
+  @@index([personnelId])
+  @@index([uploadedAt])
+  @@index([parserStatus])
+}
+
+model PersonnelCourseRecord {
+  id                String                       @id @default(cuid())
+  personnelId       String
+  personnel         Personnel                    @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  documentId        String?
+  document          PersonnelDocument?           @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  name              String
+  issuer            String?
+  certificateNumber String?
+  issueDate         DateTime?                    @db.Date
+  expiryDate        DateTime?                    @db.Date
+  status            PersonnelCourseRecordStatus  @default(SUGGESTED)
+  source            PersonnelCourseRecordSource  @default(MANUAL)
+  aiConfidence      Float?
+  rejectionReason   String?
+  createdById       String
+  createdByName     String
+  approvedById      String?
+  approvedByName    String?
+  approvedAt        DateTime?
+  rejectedById      String?
+  rejectedByName    String?
+  rejectedAt        DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@index([personnelId])
+  @@index([status])
+  @@index([expiryDate])
+  @@index([documentId])
 }
 
 model FieldCategory {
@@ -666,6 +720,24 @@ enum PersonnelStatus {
   ARCHIVED
 }
 
+enum PersonnelDocumentParserStatus {
+  NOT_RUN
+  SUGGESTIONS_CREATED
+  NO_SUGGESTIONS
+  FAILED
+}
+
+enum PersonnelCourseRecordStatus {
+  SUGGESTED
+  APPROVED
+  REJECTED
+}
+
+enum PersonnelCourseRecordSource {
+  MANUAL
+  AI
+}
+
 model EvaluationTemplate {
   id          String   @id @default(cuid())
   name        String   @unique
@@ -992,6 +1064,7 @@ model RecmanCandidate {
   recmanCreated   DateTime?
   recmanUpdated   DateTime?
   lastSyncedAt    DateTime  @default(now())
+  rawJson         String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

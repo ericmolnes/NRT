@@ -10,6 +10,7 @@ import {
   deleteTemplate,
   type ActionState,
 } from "@/app/(authenticated)/skjema/actions";
+import { toPersonForFilter } from "@/lib/forms/personnel-access";
 import type { Department } from "@/lib/queries/personnel";
 import type { PersonnelStatus } from "@/generated/prisma/enums";
 import { Lock, Globe, Shield, Plus, X, ChevronDown, ChevronRight, FileText, ListChecks, Save, Trash2, BookOpen } from "lucide-react";
@@ -28,11 +29,14 @@ interface Personnel {
   id: string;
   name: string;
   role: string;
+  department: string | null;
   status: PersonnelStatus;
   recmanCandidate: {
     corporationId: string | null;
     isContractor: boolean;
     isEmployee: boolean;
+    employeeEnd: Date | null;
+    contractorPeriods: Array<{ endDate: Date | null }>;
   } | null;
 }
 
@@ -268,28 +272,18 @@ export function CreateLinkForm({ personnel, categories, departments, templates =
   const [, deleteTemplateAction] = useActionState<ActionState, FormData>(deleteTemplate, {});
   const [, startTransition] = useTransition();
 
-  function deriveCategory(p: Personnel): LinkPersonnelCategory {
-    const rc = p.recmanCandidate;
-    if (rc?.isEmployee && !rc.isContractor) return "ANSATT";
-    if (rc?.isContractor) return "INNLEID";
-    if (!rc && p.role === "Ansatt") return "ANSATT";
-    if (!rc && p.role === "Innleid") return "INNLEID";
-    if (rc) return "KANDIDAT";
-    return "INNLEID";
-  }
-
   const filteredPersonnel = useMemo(() => {
     let result = personnel;
     if (selectedDepartments.length > 0) {
-      result = result.filter(
-        (p) =>
-          p.recmanCandidate?.corporationId &&
-          selectedDepartments.includes(p.recmanCandidate.corporationId)
+      result = result.filter((p) =>
+        selectedDepartments.includes(toPersonForFilter(p).department ?? "")
       );
     }
     if (selectedCategories.length > 0) {
       result = result.filter((p) =>
-        selectedCategories.includes(deriveCategory(p))
+        selectedCategories.includes(
+          toPersonForFilter(p).category as LinkPersonnelCategory
+        )
       );
     }
     return result;

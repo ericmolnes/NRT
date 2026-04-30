@@ -1,35 +1,14 @@
 import { Badge } from "@/components/ui/badge";
 import { ScoreBadge } from "@/components/evaluering/score-badge";
-import { resolveCategory } from "@/lib/personell/category";
+import {
+  getPersonnelListPresentation,
+  type PersonnelListPresentationInput,
+} from "@/lib/personell/personnel-list-presentation";
+import type { PersonnelishRow } from "@/lib/queries/personnel-list";
 import Link from "next/link";
 
-interface PersonnelWithEvals {
-  id: string;
-  name: string;
-  role: string;
-  department: string | null;
-  status: string;
-  evaluations: { score: number }[];
-  poEmployee: {
-    id: string;
-    lastSyncedAt: Date;
-    isActive: boolean;
-    department?: string | null;
-  } | null;
-  recmanCandidate: {
-    id: string;
-    lastSyncedAt: Date;
-    isEmployee: boolean;
-    employeeEnd?: Date | null;
-    isContractor?: boolean;
-    title?: string | null;
-    imageUrl?: string | null;
-    contractorPeriods?: Array<{ id: string; startDate: Date; endDate: Date | null }>;
-  } | null;
-}
-
 interface PersonnelListProps {
-  personnel: PersonnelWithEvals[];
+  personnel: PersonnelishRow[];
 }
 
 export function PersonnelList({ personnel }: PersonnelListProps) {
@@ -82,36 +61,13 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
                   )
                 : null;
 
-            // Use department from PO if available, then Personnel
-            const department =
-              person.department ||
-              person.poEmployee?.department ||
-              null;
-
-            // Avled kategori fra eksisterende felter — samme regel som i queries og UI.
-            const hasOpenPeriod =
-              (person.recmanCandidate?.contractorPeriods?.length ?? 0) > 0;
-            const category = resolveCategory({
-              recmanCandidate: person.recmanCandidate
-                ? {
-                    isEmployee: person.recmanCandidate.isEmployee,
-                    employeeEnd: person.recmanCandidate.employeeEnd ?? null,
-                    isContractor: person.recmanCandidate.isContractor ?? false,
-                  }
-                : null,
-              hasOpenContractorPeriod: hasOpenPeriod,
-              isManualPersonnel: !person.recmanCandidate,
-            });
-            const categoryLabel =
-              category === "ANSATT"
-                ? "Ansatt"
-                : category === "INNLEID"
-                  ? "Innleid"
-                  : "Kandidat";
+            const view = getPersonnelListPresentation(
+              person as PersonnelListPresentationInput
+            );
             const categoryClass =
-              category === "ANSATT"
+              person.category === "ANSATT"
                 ? "bg-emerald-100 text-emerald-700"
-                : category === "INNLEID"
+                : person.category === "INNLEID"
                   ? "bg-blue-100 text-blue-700"
                   : "bg-muted text-muted-foreground";
 
@@ -122,7 +78,7 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
               >
                 <td className="px-4 py-3">
                   <Link
-                    href={`/personell/${person.id}`}
+                    href={view.href}
                     className="flex items-center gap-3 group"
                   >
                     {person.recmanCandidate?.imageUrl ? (
@@ -150,30 +106,28 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
-                  {person.recmanCandidate?.title || person.role}
+                  {view.displayRole}
                 </td>
                 <td className="px-4 py-3 text-sm text-muted-foreground">
-                  {department ?? "-"}
+                  {view.displayDepartment}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-1">
-                    {person.poEmployee && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0"
-                      >
-                        PO
-                      </Badge>
-                    )}
-                    {person.recmanCandidate && (
-                      <Badge
-                        variant="secondary"
-                        className="bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0"
-                      >
-                        Recman
-                      </Badge>
-                    )}
-                    {!person.poEmployee && !person.recmanCandidate && (
+                    {view.syncLabels.length > 0 ? (
+                      view.syncLabels.map((label) => (
+                        <Badge
+                          key={label}
+                          variant="secondary"
+                          className={
+                            label === "PO"
+                              ? "bg-blue-100 text-blue-700 text-[10px] px-1.5 py-0"
+                              : "bg-emerald-100 text-emerald-700 text-[10px] px-1.5 py-0"
+                          }
+                        >
+                          {label}
+                        </Badge>
+                      ))
+                    ) : (
                       <span className="text-xs text-muted-foreground/50">
                         —
                       </span>
@@ -185,7 +139,7 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
                     variant="secondary"
                     className={`text-[10px] px-1.5 py-0 ${categoryClass}`}
                   >
-                    {categoryLabel}
+                    {view.categoryLabel}
                   </Badge>
                 </td>
                 <td className="px-4 py-3">
