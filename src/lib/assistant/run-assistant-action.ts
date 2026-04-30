@@ -1,3 +1,8 @@
+import {
+  ignoreSyncConflict,
+  resolveSyncConflict,
+} from "@/app/(authenticated)/settings/sync-conflicts/actions";
+import { saveAiModel } from "@/app/(authenticated)/settings/actions";
 import { db } from "@/lib/db";
 import type { AccessLevel } from "@/lib/access/get-current-access";
 import {
@@ -91,7 +96,70 @@ export type RunAssistantActionResult =
       errorMessage: string;
     };
 
-export const defaultAssistantActionRegistry: AssistantActionRegistry = {};
+function readPayloadRecord(payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("Assistant action payload must be an object");
+  }
+  return payload as Record<string, unknown>;
+}
+
+function readStringPayload(payload: unknown, key: string): string {
+  const value = readPayloadRecord(payload)[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`Assistant action payload must include ${key}`);
+  }
+  return value;
+}
+
+function readSyncResolution(payload: unknown): "KEEP_LOCAL" | "KEEP_REMOTE" {
+  const value = readPayloadRecord(payload).resolution;
+  if (value !== "KEEP_LOCAL" && value !== "KEEP_REMOTE") {
+    throw new Error("Assistant action payload must include a sync resolution");
+  }
+  return value;
+}
+
+export const defaultAssistantActionRegistry: AssistantActionRegistry = {
+  "assistant.plan": async ({ prompt }) => ({
+    summary: "Assistant plan request accepted",
+    data: { prompt },
+  }),
+  "assistant.ask": async ({ prompt }) => ({
+    summary: "Assistant ask request accepted",
+    data: { prompt },
+  }),
+  "settings.aiModel.update": async ({ payload }) => {
+    const model = readStringPayload(payload, "model");
+    const result = await saveAiModel(model);
+    if (!result.success) {
+      throw new Error("AI model update was rejected");
+    }
+    return { summary: "AI model updated", data: { model } };
+  },
+  "syncConflict.resolve": async ({ payload }) => {
+    const conflictId = readStringPayload(payload, "conflictId");
+    const resolution = readSyncResolution(payload);
+    const result = await resolveSyncConflict(conflictId, resolution);
+    if (!result.ok) {
+      throw new Error("Sync conflict resolution failed");
+    }
+    return {
+      summary: `Sync conflict ${conflictId} resolved with ${resolution}`,
+      data: { conflictId, resolution },
+    };
+  },
+  "syncConflict.ignore": async ({ payload }) => {
+    const conflictId = readStringPayload(payload, "conflictId");
+    const result = await ignoreSyncConflict(conflictId);
+    if (!result.ok) {
+      throw new Error("Sync conflict ignore failed");
+    }
+    return {
+      summary: `Sync conflict ${conflictId} ignored`,
+      data: { conflictId },
+    };
+  },
+};
 
 function actionSummary(input: {
   actionId: string;

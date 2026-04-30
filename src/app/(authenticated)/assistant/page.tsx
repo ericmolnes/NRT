@@ -1,11 +1,12 @@
 import { Bot, CloudAlert } from "lucide-react";
 
+import {
+  runAssistantIgnoreSyncConflictAction,
+  runAssistantPromptAction,
+  runAssistantResolveSyncConflictAction,
+} from "@/app/(authenticated)/assistant/actions";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { SyncReviewPanel } from "@/components/assistant/sync-review-panel";
-import {
-  ignoreSyncConflict,
-  resolveSyncConflict,
-} from "@/app/(authenticated)/settings/sync-conflicts/actions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { resolveAccessForUser } from "@/lib/access/get-current-access";
@@ -67,6 +68,7 @@ export default async function AssistantPage() {
       <AssistantPanel
         accessLevel={access.level}
         capabilities={capabilities}
+        runAction={runAssistantPromptAction}
       />
 
       <section className="space-y-3">
@@ -77,8 +79,8 @@ export default async function AssistantPage() {
         <SyncReviewPanel
           conflicts={conflicts}
           canManage={canReviewSyncConflicts}
-          resolveAction={resolveSyncConflict}
-          ignoreAction={ignoreSyncConflict}
+          resolveAction={runAssistantResolveSyncConflictAction}
+          ignoreAction={runAssistantIgnoreSyncConflictAction}
         />
       </section>
     </div>

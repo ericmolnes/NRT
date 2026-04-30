@@ -91,7 +91,7 @@ export function describeSyncReviewAction(action: SyncReviewAction) {
 }
 
 export function assertSyncReviewMutationResult(
-  result: { ok: boolean } | undefined,
+  result: { ok: boolean; errorMessage?: string } | undefined,
   actionDescription: string
 ): asserts result is { ok: true } {
   if (!result) {
@@ -99,7 +99,7 @@ export function assertSyncReviewMutationResult(
   }
 
   if (result.ok !== true) {
-    throw new Error(`${actionDescription} mislyktes.`);
+    throw new Error(result.errorMessage || `${actionDescription} mislyktes.`);
   }
 }
 
@@ -128,8 +128,10 @@ export function SyncReviewPanel({
   resolveAction: (
     conflictId: string,
     resolution: "KEEP_LOCAL" | "KEEP_REMOTE"
-  ) => Promise<{ ok: boolean } | undefined>;
-  ignoreAction: (conflictId: string) => Promise<{ ok: boolean } | undefined>;
+  ) => Promise<{ ok: boolean; errorMessage?: string } | undefined>;
+  ignoreAction: (
+    conflictId: string
+  ) => Promise<{ ok: boolean; errorMessage?: string } | undefined>;
 }) {
   const router = useRouter();
   const [stagedAction, setStagedAction] = useState<SyncReviewAction | null>(

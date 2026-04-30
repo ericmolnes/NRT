@@ -87,6 +87,15 @@ test("assertSyncReviewMutationResult rejects missing or unsuccessful action resu
     /mislyktes/
   );
 
+  assert.throws(
+    () =>
+      assertSyncReviewMutationResult(
+        { ok: false, errorMessage: "Ikke tillatt" },
+        "Behold lokal verdi for konflikt conflict-1"
+      ),
+    /Ikke tillatt/
+  );
+
   assert.doesNotThrow(() =>
     assertSyncReviewMutationResult({ ok: true }, "Ignorer konflikt conflict-3")
   );

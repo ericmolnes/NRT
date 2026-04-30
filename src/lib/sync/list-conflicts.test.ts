@@ -147,3 +147,47 @@ test("resolveSyncConflict applies KEEP_REMOTE to known synced models only", () =
     "Recman KEEP_REMOTE must coerce date-like JSON values"
   );
 });
+
+test("handled sync conflict actions acknowledge the remote base snapshot", () => {
+  const source = readFileSync(
+    new URL("../../app/(authenticated)/settings/sync-conflicts/actions.ts", import.meta.url),
+    "utf8"
+  );
+
+  for (const functionName of ["resolveSyncConflict", "ignoreSyncConflict"]) {
+    const start = source.indexOf(`export async function ${functionName}`);
+    assert.notEqual(start, -1, `${functionName} must be exported`);
+
+    const nextExport = source.indexOf("export async function", start + 1);
+    const body = source.slice(start, nextExport === -1 ? source.length : nextExport);
+
+    assert.match(
+      body,
+      /acknowledgeConflictRemoteBase\(tx, conflict\)/,
+      `${functionName} must advance the rawJson base for handled conflicts`
+    );
+  }
+});
+
+test("ignoreSyncConflict selects remote value before acknowledging base", () => {
+  const source = readFileSync(
+    new URL("../../app/(authenticated)/settings/sync-conflicts/actions.ts", import.meta.url),
+    "utf8"
+  );
+  const start = source.indexOf("export async function ignoreSyncConflict");
+  assert.notEqual(start, -1, "ignoreSyncConflict must be exported");
+
+  const body = source.slice(start);
+  const remoteValueSelect = body.indexOf("remoteValue: true");
+  const acknowledgeBase = body.indexOf("acknowledgeConflictRemoteBase(tx, conflict)");
+
+  assert.notEqual(
+    remoteValueSelect,
+    -1,
+    "ignoreSyncConflict must select remoteValue for base acknowledgement"
+  );
+  assert.ok(
+    remoteValueSelect < acknowledgeBase,
+    "ignoreSyncConflict must load remoteValue before acknowledging base"
+  );
+});

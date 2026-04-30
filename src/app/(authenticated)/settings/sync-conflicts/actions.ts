@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assertAdmin } from "@/lib/rbac";
 import { Prisma } from "@/generated/prisma/client";
+import { acknowledgeConflictRemoteBase } from "@/lib/sync/resolve-conflict-base";
 
 type SyncResolutionChoice = "KEEP_LOCAL" | "KEEP_REMOTE";
 
@@ -184,6 +185,7 @@ export async function resolveSyncConflict(
     if (resolution === "KEEP_REMOTE") {
       await applyRemoteConflictValue(tx, conflict);
     }
+    await acknowledgeConflictRemoteBase(tx, conflict);
 
     const log = await tx.changeLog.create({
       data: {
@@ -247,6 +249,7 @@ export async function ignoreSyncConflict(conflictId: string) {
         model: true,
         recordId: true,
         field: true,
+        remoteValue: true,
         status: true,
       },
     });
@@ -255,6 +258,7 @@ export async function ignoreSyncConflict(conflictId: string) {
     if (conflict.status !== "UNRESOLVED") {
       throw new Error("Konflikten er allerede behandlet");
     }
+    await acknowledgeConflictRemoteBase(tx, conflict);
 
     const sourceName =
       conflict.source === "RECMAN" ? "RecMan" : "PowerOffice";

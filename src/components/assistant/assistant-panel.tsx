@@ -1,13 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import {
   Bot,
   CheckCircle2,
+  Loader2,
   Lock,
   ShieldCheck,
   Sparkles,
-  ZapOff,
 } from "lucide-react";
 
 import {
@@ -28,6 +28,7 @@ import {
   type AssistantActionId,
   type UserAssistantCapabilities,
 } from "@/lib/assistant/resolve-user-capabilities";
+import type { RunAssistantActionResult } from "@/lib/assistant/run-assistant-action";
 
 function actionTone(actionId: AssistantActionId) {
   if (ASSISTANT_ACTIONS[actionId].mutating) return "destructive" as const;
@@ -37,13 +38,21 @@ function actionTone(actionId: AssistantActionId) {
 export function AssistantPanel({
   capabilities,
   accessLevel,
+  runAction,
 }: {
   capabilities: UserAssistantCapabilities;
   accessLevel: "USER" | "ADMIN";
+  runAction: (input: {
+    actionId: "assistant.plan" | "assistant.ask";
+    mode: "PLAN" | "ASK";
+    prompt: string;
+  }) => Promise<RunAssistantActionResult>;
 }) {
   const [mode, setMode] = useState<AssistantUiMode>("ASK");
   const [prompt, setPrompt] = useState("");
   const [confirmationSelected, setConfirmationSelected] = useState(false);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const mutatingActionCount = useMemo(
     () =>
@@ -54,8 +63,27 @@ export function AssistantPanel({
   );
 
   const hasPrompt = prompt.trim().length > 0;
-  const canQueueMutatingPreview =
-    hasPrompt && mode === "ASK" && confirmationSelected;
+  const promptActionId =
+    mode === "PLAN" ? "assistant.plan" : "assistant.ask";
+  const canRunPrompt =
+    hasPrompt && mode !== "AUTO" && (mode === "PLAN" || confirmationSelected);
+
+  function handleRunPromptAction() {
+    if (!canRunPrompt) return;
+
+    startTransition(async () => {
+      try {
+        const result = await runAction({
+          actionId: promptActionId,
+          mode,
+          prompt,
+        });
+        setResultMessage(result.ok ? "Handling logget." : result.errorMessage);
+      } catch (caught) {
+        setResultMessage(caught instanceof Error ? caught.message : String(caught));
+      }
+    });
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -77,6 +105,7 @@ export function AssistantPanel({
             onChange={(event) => {
               setPrompt(event.target.value);
               setConfirmationSelected(false);
+              setResultMessage(null);
             }}
             placeholder="Arbeidsordre, spørsmål eller kontrollpunkt"
             className="min-h-28 resize-y text-sm"
@@ -100,20 +129,25 @@ export function AssistantPanel({
             <Button
               type="button"
               variant="secondary"
-              disabled={!canQueueMutatingPreview}
+              disabled={!canRunPrompt || isPending}
+              onClick={handleRunPromptAction}
               className="h-9 w-full sm:w-44"
             >
-              <ShieldCheck className="h-4 w-4" />
+              {isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-4 w-4" />
+              )}
               Klargjør
             </Button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
             <Badge variant="outline" className="gap-1">
-              <ZapOff className="h-3 w-3" />
-              Handlers ikke koblet
+              <ShieldCheck className="h-3 w-3" />
+              Action layer aktiv
             </Badge>
-            <span>Ingen assistenthandling kjøres fra dette panelet.</span>
+            {resultMessage && <span>{resultMessage}</span>}
           </div>
         </CardContent>
       </Card>

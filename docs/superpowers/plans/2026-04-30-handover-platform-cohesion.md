@@ -242,3 +242,39 @@ Hvis Prisma-klienten er stale etter schema/migration:
 ```powershell
 pnpm exec prisma generate --config prisma.config.ts
 ```
+
+## Continuation 2026-04-30
+
+Ny pass paa `codex/task3-task4-cohesion` etter subagent-review:
+
+- Branch er rebased paa `origin/main` commit
+  `0a17cd6 fix(build): make main deployable on Vercel`.
+- Assistant action layer er koblet inn i `/assistant` via server actions som
+  gaar gjennom `runAssistantAction`, capability-sjekk og `AiActionRun`-logging.
+- Sync review-panelets resolve/ignore-actions gaar via samme action layer.
+- Handterte sync-konflikter oppdaterer naa rawJson/base-snapshot for feltets
+  remote-verdi, slik at samme konflikt ikke opprettes paa nytt i neste sync.
+- Prompt-panelet fanger server-action-feil og viser feilmeldingen i UI.
+- Sync review-panelet bevarer action-layer-feilmeldinger ved mislykkede
+  mutasjoner.
+
+Verifisering i denne pass:
+
+```powershell
+pnpm exec tsx --test "src/**/*.test.ts"
+pnpm build
+pnpm lint
+git diff --check
+pnpm exec prisma migrate status --config prisma.config.ts
+```
+
+Resultat:
+
+- Node test runner: `209` tester passet, `0` feilet.
+- `pnpm build`: OK.
+- `pnpm lint`: exit `0`, fortsatt `61` eksisterende warnings.
+- `git diff --check`: exit `0`, kun CRLF-normaliseringswarnings.
+- Prisma migrate status: schema up to date.
+
+Subagent re-review etter fixene fant ingen gjenvaarende Critical/Important
+funn.

@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { runAssistantAction } from "./run-assistant-action";
-import type { AssistantActionId } from "./resolve-user-capabilities";
+import {
+  defaultAssistantActionRegistry,
+  runAssistantAction,
+} from "./run-assistant-action";
+import {
+  ASSISTANT_ACTIONS,
+  type AssistantActionId,
+} from "./resolve-user-capabilities";
 
 function createFakeAiActionRunClient() {
   const creates: Array<Record<string, unknown>> = [];
@@ -37,6 +43,16 @@ function parseSummary(value: unknown) {
     handlerSummary?: string;
   };
 }
+
+test("default registry has approved production handlers for every assistant action", () => {
+  for (const actionId of Object.keys(ASSISTANT_ACTIONS) as AssistantActionId[]) {
+    assert.equal(
+      typeof defaultAssistantActionRegistry[actionId],
+      "function",
+      `${actionId} must have a default handler`
+    );
+  }
+});
 
 test("rejects actions outside the user's capability set and does not call handlers", async () => {
   const db = createFakeAiActionRunClient();
@@ -102,7 +118,7 @@ test("rejects unknown action ids before invoking any handler", async () => {
   assert.match(String(db.creates[0].errorMessage), /Unknown assistant action/);
 });
 
-test("rejects approved actions without a registered default handler", async () => {
+test("rejects approved actions without a registered handler", async () => {
   const db = createFakeAiActionRunClient();
 
   const result = await runAssistantAction({
@@ -112,6 +128,7 @@ test("rejects approved actions without a registered default handler", async () =
     prompt: "Bytt modell",
     user: { id: "admin-1", name: "Admin One" },
     client: db.client,
+    registry: {},
   });
 
   assert.equal(result.ok, false);
