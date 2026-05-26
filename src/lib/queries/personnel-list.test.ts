@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyJsonPostFilters,
+  buildPersonnelWhere,
   mergeRows,
   personnelToRow,
   recmanCandidateToRow,
@@ -344,6 +345,23 @@ test("applyJsonPostFilters: ingen filtre returnerer alle", () => {
   const row = recmanCandidateToRow(makeRcInput(), NOW);
   const filtered = applyJsonPostFilters([row], {});
   assert.equal(filtered.length, 1);
+});
+
+// ─── buildPersonnelWhere ──────────────────────────────────────────
+
+test("buildPersonnelWhere: ANSATT beholder ACTIVE som default status", () => {
+  const where = buildPersonnelWhere({ category: "ANSATT" }, NOW);
+  assert.equal(where.status, "ACTIVE");
+});
+
+test("buildPersonnelWhere: KANDIDAT bruker ikke ACTIVE som default status", () => {
+  const where = buildPersonnelWhere({ category: "KANDIDAT" }, NOW);
+  assert.equal(where.status, undefined);
+});
+
+test("buildPersonnelWhere: INNLEID bruker ikke ACTIVE som default status", () => {
+  const where = buildPersonnelWhere({ category: "INNLEID" }, NOW);
+  assert.equal(where.status, undefined);
 });
 
 // ─── Integrasjonsoppførsel: kategori KANDIDAT inkluderer både kilder ──

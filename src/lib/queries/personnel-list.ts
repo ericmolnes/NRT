@@ -558,7 +558,7 @@ export type RecmanCandidateRowInput = {
  * (company, city, minRating). Holdes lokalt fordi vi har ulike filtre i
  * recman-spørringen og ikke ønsker dobbelt opp.
  */
-function buildPersonnelWhere(
+export function buildPersonnelWhere(
   filters: PersonnelishFilters,
   now: Date
 ): Prisma.PersonnelWhereInput {
@@ -667,9 +667,12 @@ function buildPersonnelWhere(
   const where: Prisma.PersonnelWhereInput = {};
   if (ANDs.length > 0) where.AND = ANDs;
 
+  const shouldDefaultActiveStatus =
+    !categories || categories.includes("ANSATT");
+
   if (filters.status && filters.status !== "ALL") {
     where.status = filters.status as Prisma.EnumPersonnelStatusFilter;
-  } else if (filters.status !== "ALL") {
+  } else if (filters.status !== "ALL" && shouldDefaultActiveStatus) {
     where.status = "ACTIVE";
   }
 
