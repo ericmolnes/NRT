@@ -80,6 +80,37 @@ test("buildRecmanCandidateSyncPlan does not invent a base for legacy conflicts",
   assert.equal(plan.nextBaseRawJson, null);
 });
 
+test("buildRecmanCandidateSyncPlan applies RecMan employee fields even when base is missing", () => {
+  const local: RecmanCandidateSyncShape = {
+    firstName: "Local",
+    isEmployee: true,
+    employeeNumber: 42,
+    employeeStart: new Date("2024-01-01T00:00:00Z"),
+    employeeEnd: null,
+  };
+  const remote: RecmanCandidateSyncShape = {
+    firstName: "Remote",
+    isEmployee: false,
+    employeeNumber: null,
+    employeeStart: null,
+    employeeEnd: null,
+  };
+
+  const plan = buildRecmanCandidateSyncPlan({
+    local,
+    remote,
+    baseRawJson: null,
+  });
+
+  assert.equal(plan.diagnosis.kind, "conflict");
+  assert.deepEqual(plan.safeFieldUpdates, {
+    isEmployee: false,
+    employeeNumber: null,
+    employeeStart: null,
+  });
+  assert.equal(plan.nextBaseRawJson, null);
+});
+
 test("deriveRecmanCandidateEmployeeState derives personnel status from local synced row", () => {
   assert.deepEqual(
     deriveRecmanCandidateEmployeeState({
@@ -103,5 +134,16 @@ test("deriveRecmanCandidateEmployeeState derives personnel status from local syn
       employeeEnd: null,
     }),
     { hasEmployee: false, targetStatus: null }
+  );
+
+  assert.deepEqual(
+    deriveRecmanCandidateEmployeeState(
+      {
+        isEmployee: false,
+        employeeEnd: null,
+      },
+      { wasEmployee: true }
+    ),
+    { hasEmployee: false, targetStatus: "INACTIVE" }
   );
 });

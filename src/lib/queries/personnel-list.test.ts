@@ -6,6 +6,7 @@ import {
   mergeRows,
   personnelToRow,
   recmanCandidateToRow,
+  sortPersonnelRows,
   type PersonnelRowInput,
   type PersonnelishRow,
   type RecmanCandidateRowInput,
@@ -192,6 +193,86 @@ test("mergeRows: sorterer alfabetisk på navn (norsk)", () => {
   assert.deepEqual(
     merged.map((r) => r.name),
     ["Anders", "Birger", "Øystein"]
+  );
+});
+
+test("sortPersonnelRows: sorterer kategori i operativ rekkefølge", () => {
+  const rows: PersonnelishRow[] = [
+    recmanCandidateToRow(
+      makeRcInput({ id: "k", firstName: "Kandidat", isEmployee: false }),
+      NOW
+    ),
+    recmanCandidateToRow(
+      makeRcInput({ id: "a", firstName: "Ansatt", isEmployee: true }),
+      NOW
+    ),
+    recmanCandidateToRow(
+      makeRcInput({ id: "i", firstName: "Innleid", isContractor: true }),
+      NOW
+    ),
+  ];
+
+  const sorted = sortPersonnelRows(rows, {
+    sortBy: "category",
+    sortDirection: "asc",
+  });
+
+  assert.deepEqual(
+    sorted.map((r) => r.category),
+    ["ANSATT", "INNLEID", "KANDIDAT"]
+  );
+});
+
+test("sortPersonnelRows: sorterer snitt-score synkende og legger manglende score sist", () => {
+  const high = personnelToRow(
+    makePersonnelInput({
+      id: "high",
+      name: "Høy Score",
+      evaluations: [
+        {
+          score: 5,
+          hpiSafety: 5,
+          competence: 5,
+          collaboration: 5,
+          workEthic: 5,
+          independence: 5,
+          punctuality: 5,
+        },
+      ],
+    }),
+    NOW
+  );
+  const low = personnelToRow(
+    makePersonnelInput({
+      id: "low",
+      name: "Lav Score",
+      evaluations: [
+        {
+          score: 2,
+          hpiSafety: 2,
+          competence: 2,
+          collaboration: 2,
+          workEthic: 2,
+          independence: 2,
+          punctuality: 2,
+        },
+      ],
+    }),
+    NOW
+  );
+  const none = personnelToRow(
+    makePersonnelInput({ id: "none", name: "Uten Score" }),
+    NOW
+  );
+
+  const sorted = sortPersonnelRows([none, low, high], {
+    sortBy: "score",
+    sortDirection: "desc",
+  });
+
+  assert.deepEqual(
+    sorted.map((r) => r.id),
+    ["high", "low", "none"]
   );
 });
 

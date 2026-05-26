@@ -109,6 +109,18 @@ export type PersonnelishRow = {
   evaluations: PersonnelishEvaluation[];
 };
 
+export type PersonnelSortBy =
+  | "name"
+  | "role"
+  | "department"
+  | "category"
+  | "sync"
+  | "score"
+  | "evaluations"
+  | "lastSynced";
+
+export type SortDirection = "asc" | "desc";
+
 // ─── Filter-input ────────────────────────────────────────────────
 
 export type PersonnelishFilters = {
@@ -116,6 +128,8 @@ export type PersonnelishFilters = {
   category?: PersonnelCategory | PersonnelCategory[];
   /** Tekstsøk på navn, e-post, tittel. */
   search?: string;
+  /** Rolle/stilling fra Personnel.role eller RecMan title. */
+  role?: string;
   /** RecMan-corporation-ID (avdeling). */
   department?: string;
   /** "po" | "recman" | "unlinked" — synk-status. */
@@ -134,6 +148,12 @@ export type PersonnelishFilters = {
   skill?: string;
   /** Personell-status (default ACTIVE). */
   status?: string;
+  /** Filtrer på om raden har evalueringer. */
+  hasEvaluations?: "yes" | "no";
+  /** Sorteringsfelt. */
+  sortBy?: PersonnelSortBy;
+  /** Sorteringsretning. */
+  sortDirection?: SortDirection;
   /**
    * Når true (default for KANDIDAT/INNLEID), inkluder også RecmanCandidate-
    * rader uten Personnel-kobling. Settes til false når man vil ha kun
@@ -318,6 +338,19 @@ export function applyJsonPostFilters(
   return result;
 }
 
+export function applyPersonnelPostFilters(
+  rows: PersonnelishRow[],
+  filters: Pick<PersonnelishFilters, "hasEvaluations">
+): PersonnelishRow[] {
+  if (filters.hasEvaluations === "yes") {
+    return rows.filter((row) => row.evaluations.length > 0);
+  }
+  if (filters.hasEvaluations === "no") {
+    return rows.filter((row) => row.evaluations.length === 0);
+  }
+  return rows;
+}
+
 /**
  * Slår sammen Personnel-baserte og RecmanCandidate-baserte rader, fjerner
  * duplikater (RecmanCandidate som allerede er representert via Personnel)
@@ -341,6 +374,131 @@ export function mergeRows(
   return [...personnelRows, ...onlyUnlinked].sort((a, b) =>
     a.name.localeCompare(b.name, "nb", { sensitivity: "base" })
   );
+}
+
+const CATEGORY_SORT_ORDER: Record<PersonnelCategory, number> = {
+  ANSATT: 0,
+  INNLEID: 1,
+  KANDIDAT: 2,
+};
+
+function getAverageScore(row: PersonnelishRow): number | null {
+  if (row.evaluations.length === 0) return null;
+  const total = row.evaluations.reduce(
+    (sum, evaluation) => sum + evaluation.score,
+    0
+  );
+  return total / row.evaluations.length;
+}
+
+function getLastSyncedAt(row: PersonnelishRow): Date | null {
+  const dates = [
+    row.recmanCandidate?.lastSyncedAt ?? null,
+    row.poEmployee?.lastSyncedAt ?? null,
+  ].filter((date): date is Date => date !== null);
+
+  if (dates.length === 0) return null;
+  return dates.reduce((latest, date) =>
+    date.getTime() > latest.getTime() ? date : latest
+  );
+}
+
+function getSyncRank(row: PersonnelishRow): number {
+  let rank = 0;
+  if (row.recmanCandidate) rank += 2;
+  if (row.poEmployee) rank += 1;
+  return rank;
+}
+
+function compareText(
+  a: string | null | undefined,
+  b: string | null | undefined
+): number {
+  const aValue = a?.trim() || null;
+  const bValue = b?.trim() || null;
+  if (!aValue && !bValue) return 0;
+  if (!aValue) return 1;
+  if (!bValue) return -1;
+  return aValue.localeCompare(bValue, "nb", { sensitivity: "base" });
+}
+
+function compareNullableNumber(
+  a: number | null,
+  b: number | null,
+  direction: SortDirection
+): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return direction === "desc" ? b - a : a - b;
+}
+
+function compareNullableDate(
+  a: Date | null,
+  b: Date | null,
+  direction: SortDirection
+): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return direction === "desc"
+    ? b.getTime() - a.getTime()
+    : a.getTime() - b.getTime();
+}
+
+export function sortPersonnelRows(
+  rows: PersonnelishRow[],
+  options: {
+    sortBy?: PersonnelSortBy;
+    sortDirection?: SortDirection;
+  } = {}
+): PersonnelishRow[] {
+  const sortBy = options.sortBy ?? "name";
+  const sortDirection = options.sortDirection ?? "asc";
+  const direction = sortDirection === "desc" ? -1 : 1;
+
+  return [...rows].sort((a, b) => {
+    let result = 0;
+    let applyDirection = true;
+
+    if (sortBy === "role") {
+      result = compareText(
+        a.recmanCandidate?.title ?? a.role,
+        b.recmanCandidate?.title ?? b.role
+      );
+    } else if (sortBy === "department") {
+      result = compareText(a.department, b.department);
+    } else if (sortBy === "category") {
+      result =
+        CATEGORY_SORT_ORDER[a.category] - CATEGORY_SORT_ORDER[b.category];
+    } else if (sortBy === "sync") {
+      result = getSyncRank(a) - getSyncRank(b);
+    } else if (sortBy === "score") {
+      result = compareNullableNumber(
+        getAverageScore(a),
+        getAverageScore(b),
+        sortDirection
+      );
+      applyDirection = false;
+    } else if (sortBy === "evaluations") {
+      result = a.evaluations.length - b.evaluations.length;
+    } else if (sortBy === "lastSynced") {
+      result = compareNullableDate(
+        getLastSyncedAt(a),
+        getLastSyncedAt(b),
+        sortDirection
+      );
+      applyDirection = false;
+    } else {
+      result = compareText(a.name, b.name);
+    }
+
+    if (result === 0 && sortBy !== "name") {
+      result = compareText(a.name, b.name);
+    }
+
+    return applyDirection ? result * direction : result;
+  });
 }
 
 // ─── Hjelpe-typer for `personnelToRow` / `recmanCandidateToRow` ──
@@ -426,6 +584,25 @@ function buildPersonnelWhere(
     });
   }
 
+  if (filters.role) {
+    ANDs.push({
+      OR: [
+        { role: { contains: filters.role, mode: "insensitive" } },
+        {
+          recmanCandidate: {
+            is: { title: { contains: filters.role, mode: "insensitive" } },
+          },
+        },
+      ],
+    });
+  }
+
+  if (filters.hasEvaluations === "yes") {
+    ANDs.push({ evaluations: { some: {} } });
+  } else if (filters.hasEvaluations === "no") {
+    ANDs.push({ evaluations: { none: {} } });
+  }
+
   const recmanFilter: Prisma.RecmanCandidateWhereInput = {};
   let requireRecmanRelation = false;
   let requireUnlinked = false;
@@ -490,9 +667,9 @@ function buildPersonnelWhere(
   const where: Prisma.PersonnelWhereInput = {};
   if (ANDs.length > 0) where.AND = ANDs;
 
-  if (filters.status) {
+  if (filters.status && filters.status !== "ALL") {
     where.status = filters.status as Prisma.EnumPersonnelStatusFilter;
-  } else {
+  } else if (filters.status !== "ALL") {
     where.status = "ACTIVE";
   }
 
@@ -565,6 +742,10 @@ function buildRecmanOnlyWhere(
         { title: { contains: filters.search, mode: "insensitive" } },
       ],
     });
+  }
+
+  if (filters.role) {
+    ANDs.push({ title: { contains: filters.role, mode: "insensitive" } });
   }
 
   if (filters.department) {
@@ -678,5 +859,10 @@ export async function getPersonnelishList(
   }
 
   const merged = mergeRows(normalizedPersonnel, normalizedRecman);
-  return applyJsonPostFilters(merged, filters);
+  const jsonFiltered = applyJsonPostFilters(merged, filters);
+  const postFiltered = applyPersonnelPostFilters(jsonFiltered, filters);
+  return sortPersonnelRows(postFiltered, {
+    sortBy: filters.sortBy,
+    sortDirection: filters.sortDirection,
+  });
 }

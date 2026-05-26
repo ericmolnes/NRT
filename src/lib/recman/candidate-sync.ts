@@ -17,12 +17,23 @@ export type RecmanCandidateEmployeeState = {
   targetStatus: "ACTIVE" | "INACTIVE" | null;
 };
 
+export type PreviousRecmanCandidateEmployeeState = {
+  wasEmployee?: boolean | null;
+};
+
 const DATE_FIELDS = new Set([
   "dob",
   "employeeStart",
   "employeeEnd",
   "recmanCreated",
   "recmanUpdated",
+]);
+
+const RECMAN_AUTHORITATIVE_FIELDS = new Set([
+  "isEmployee",
+  "employeeNumber",
+  "employeeStart",
+  "employeeEnd",
 ]);
 
 export function serializeRecmanCandidateBase(
@@ -69,6 +80,32 @@ function safeChangesFromDiagnosis(diagnosis: SyncDiagnosis): FieldDiff[] {
   return [];
 }
 
+function promoteRecmanAuthoritativeFields(
+  diagnosis: SyncDiagnosis
+): SyncDiagnosis {
+  if (diagnosis.kind !== "conflict") return diagnosis;
+
+  const authoritative: FieldDiff[] = [];
+  const conflicts: FieldDiff[] = [];
+
+  for (const change of diagnosis.conflicts) {
+    if (RECMAN_AUTHORITATIVE_FIELDS.has(change.field)) {
+      authoritative.push(change);
+    } else {
+      conflicts.push(change);
+    }
+  }
+
+  if (authoritative.length === 0) return diagnosis;
+
+  const safeRemote = [...diagnosis.safeRemote, ...authoritative];
+  if (conflicts.length === 0) {
+    return { kind: "remote_only", changes: safeRemote };
+  }
+
+  return { kind: "conflict", conflicts, safeRemote };
+}
+
 function buildNextBase(
   diagnosis: SyncDiagnosis,
   remote: RecmanCandidateSyncShape,
@@ -95,12 +132,14 @@ export function buildRecmanCandidateSyncPlan(input: {
 }): RecmanCandidateSyncPlan {
   const base = parseRecmanCandidateBase(input.baseRawJson);
   const fields = collectFields(input.local, input.remote, base);
-  const diagnosis = diagnoseFields({
-    local: input.local,
-    remote: input.remote,
-    base,
-    fields,
-  });
+  const diagnosis = promoteRecmanAuthoritativeFields(
+    diagnoseFields({
+      local: input.local,
+      remote: input.remote,
+      base,
+      fields,
+    })
+  );
 
   const safeFieldUpdates: RecmanCandidateSyncShape = {};
   for (const change of safeChangesFromDiagnosis(diagnosis)) {
@@ -117,10 +156,14 @@ export function buildRecmanCandidateSyncPlan(input: {
 }
 
 export function deriveRecmanCandidateEmployeeState(
-  shape: RecmanCandidateSyncShape
+  shape: RecmanCandidateSyncShape,
+  previous?: PreviousRecmanCandidateEmployeeState
 ): RecmanCandidateEmployeeState {
   const hasEmployee = shape.isEmployee === true;
   if (!hasEmployee) {
+    if (previous?.wasEmployee) {
+      return { hasEmployee: false, targetStatus: "INACTIVE" };
+    }
     return { hasEmployee: false, targetStatus: null };
   }
 

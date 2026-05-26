@@ -11,6 +11,20 @@ interface PersonnelListProps {
   personnel: PersonnelishRow[];
 }
 
+function formatLastSynced(person: PersonnelishRow): string {
+  const dates = [
+    person.recmanCandidate?.lastSyncedAt ?? null,
+    person.poEmployee?.lastSyncedAt ?? null,
+  ].filter((date): date is Date => date !== null);
+
+  if (dates.length === 0) return "-";
+
+  const latest = dates.reduce((current, date) =>
+    date.getTime() > current.getTime() ? date : current
+  );
+  return latest.toLocaleDateString("nb-NO");
+}
+
 export function PersonnelList({ personnel }: PersonnelListProps) {
   if (personnel.length === 0) {
     return (
@@ -24,8 +38,8 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
   }
 
   return (
-    <div className="rounded-lg border">
-      <table className="w-full">
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[920px]">
         <thead>
           <tr className="border-b bg-muted/50">
             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
@@ -39,6 +53,9 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
             </th>
             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
               Synk
+            </th>
+            <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+              Sist synket
             </th>
             <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
               Kategori
@@ -133,6 +150,9 @@ export function PersonnelList({ personnel }: PersonnelListProps) {
                       </span>
                     )}
                   </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">
+                  {formatLastSynced(person)}
                 </td>
                 <td className="px-4 py-3">
                   <Badge

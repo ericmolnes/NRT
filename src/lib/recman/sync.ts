@@ -304,6 +304,9 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
     where: { recmanId: c.candidateId },
     select: RECMAN_CANDIDATE_SYNC_SELECT,
   });
+  const previousEmployeeState = existing
+    ? { wasEmployee: existing.isEmployee }
+    : undefined;
 
   const now = new Date();
   let syncResult = emptySyncResult();
@@ -364,7 +367,10 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
     });
   }
 
-  const employeeState = deriveRecmanCandidateEmployeeState(candidate);
+  const employeeState = deriveRecmanCandidateEmployeeState(
+    candidate,
+    previousEmployeeState
+  );
 
   // Auto-match or create Personnel for ALL synced candidates.
   // Status- og role-oppdatering basert på Recman-employee-data gjøres kun

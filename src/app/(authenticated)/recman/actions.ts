@@ -29,6 +29,8 @@ export async function triggerRecmanSync(): Promise<RecmanSyncActionResult> {
 
   const result = await syncAllRecman(session.user.id);
   revalidatePath("/personell");
+  revalidatePath("/personell/innleide");
+  revalidatePath("/personell/kandidater");
   revalidatePath("/kunder");
   revalidatePath("/prosjekter");
   revalidatePath("/jobber");

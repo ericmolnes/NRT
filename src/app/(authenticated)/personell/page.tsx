@@ -3,7 +3,11 @@ import {
   getPersonnelSyncStats,
   getDistinctDepartments,
 } from "@/lib/queries/personnel";
-import { getPersonnelishList } from "@/lib/queries/personnel-list";
+import {
+  getPersonnelishList,
+  type PersonnelSortBy,
+  type SortDirection,
+} from "@/lib/queries/personnel-list";
 import {
   Card,
   CardContent,
@@ -22,21 +26,43 @@ interface PageProps {
     department?: string;
     status?: string;
     sync?: "po" | "recman" | "unlinked";
-    category?: "ANSATT" | "INNLEID" | "KANDIDAT";
+    category?: "ALL" | "ANSATT" | "INNLEID" | "KANDIDAT";
+    role?: string;
+    city?: string;
+    company?: string;
+    skill?: string;
+    minRating?: string;
+    license?: string;
+    language?: string;
+    evals?: "yes" | "no";
+    sort?: PersonnelSortBy;
+    dir?: SortDirection;
   }>;
 }
 
 export default async function PersonnelPage({ searchParams }: PageProps) {
   const params = await searchParams;
+  const category =
+    params.category === "ALL" ? undefined : params.category ?? "ANSATT";
   const [stats, personnel, departments] = await Promise.all([
     getPersonnelSyncStats(),
     getPersonnelishList({
       search: params.search,
+      role: params.role,
       department: params.department,
       status: params.status,
       syncStatus: params.sync,
-      category: params.category,
-      includeUnpersonneledCandidates: false,
+      category,
+      city: params.city,
+      company: params.company,
+      skill: params.skill,
+      minRating: params.minRating ? parseInt(params.minRating, 10) : undefined,
+      license: params.license,
+      language: params.language,
+      hasEvaluations: params.evals,
+      sortBy: params.sort,
+      sortDirection: params.dir,
+      includeUnpersonneledCandidates: category !== "ANSATT",
     }),
     getDistinctDepartments(),
   ]);
@@ -52,7 +78,7 @@ export default async function PersonnelPage({ searchParams }: PageProps) {
             Personell
           </h1>
           <p className="text-muted-foreground">
-            Samlet oversikt over ansatte med synk-status.
+            Samlet oversikt over ansatte, innleide og kandidater med synk-status.
           </p>
         </div>
         <CreatePersonSheet defaultContractor={false} triggerLabel="Nytt personell" />
