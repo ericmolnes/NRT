@@ -18,7 +18,10 @@ import {
   type SyncQueueClient,
   type SyncResult,
 } from "@/lib/sync/sync-queue";
-import { buildPowerOfficeEmployeeSyncPlan } from "./employee-sync-base";
+import {
+  buildPowerOfficeEmployeeSyncPlan,
+  derivePowerOfficePersonnelStatus,
+} from "./employee-sync-base";
 
 // Mapper feltnavn fra lokal POEmployee-shape til Prisma-update-input.
 // Brukes inne i applyChange når en safe-remote endring skal skrives.
@@ -30,6 +33,25 @@ function applyFieldUpdate(
   // vi kan returnere direkte. Hvis feltsettet utvides og krever mapping,
   // gjøres det her.
   return { [field]: value as never };
+}
+
+async function syncLinkedPersonnelStatus(
+  personnelId: string,
+  isActive: boolean | null | undefined
+) {
+  const current = await db.personnel.findUnique({
+    where: { id: personnelId },
+    select: { status: true },
+  });
+  if (!current) return;
+
+  const nextStatus = derivePowerOfficePersonnelStatus(isActive, current.status);
+  if (!nextStatus || nextStatus === current.status) return;
+
+  await db.personnel.update({
+    where: { id: personnelId },
+    data: { status: nextStatus },
+  });
 }
 
 /**
@@ -132,8 +154,9 @@ export async function syncEmployees(userId: string) {
       });
 
       // Auto-match or create Personnel record
-      if (!poEmployee.personnelId) {
-        const personnelId = await findOrCreatePersonnel({
+      let personnelId = poEmployee.personnelId;
+      if (!personnelId) {
+        personnelId = await findOrCreatePersonnel({
           firstName: po.firstName,
           lastName: po.lastName,
           email: po.emailAddress,
@@ -148,11 +171,13 @@ export async function syncEmployees(userId: string) {
         });
       } else {
         // Enrich existing Personnel with fresh PO data
-        await enrichPersonnel(poEmployee.personnelId, {
+        await enrichPersonnel(personnelId, {
           phone: po.phoneNumber,
           department: po.departmentCode,
         });
       }
+
+      await syncLinkedPersonnelStatus(personnelId, po.isActive);
     },
   });
 

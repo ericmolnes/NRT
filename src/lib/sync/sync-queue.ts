@@ -43,6 +43,16 @@ export type CreateSyncConflictArgs = {
   };
 };
 
+export type FindSyncConflictArgs = {
+  where: {
+    source: SyncSource;
+    model: string;
+    recordId?: string | null;
+    field: string;
+    status: "UNRESOLVED" | "RESOLVED" | "IGNORED";
+  };
+};
+
 export type SystemNotificationKind =
   | "ACCESS_REQUEST"
   | "SYNC_CONFLICT"
@@ -80,6 +90,7 @@ export type CreateSystemNotificationArgs = {
 
 export interface SyncQueueClient {
   syncConflict: {
+    findFirst?(args: FindSyncConflictArgs): Promise<SyncConflictRow | null>;
     create(args: CreateSyncConflictArgs): Promise<SyncConflictRow>;
   };
   systemNotification: {
@@ -155,16 +166,28 @@ export async function processSyncDiagnosis(
 
     case "conflict":
       for (const change of diagnosis.conflicts) {
-        await client.syncConflict.create({
-          data: {
-            source,
-            model,
-            recordId,
-            field: change.field,
-            localValue: change.localValue ?? null,
-            remoteValue: change.remoteValue ?? null,
+        const identity = {
+          source,
+          model,
+          recordId,
+          field: change.field,
+        };
+        const existing = await client.syncConflict.findFirst?.({
+          where: {
+            ...identity,
+            status: "UNRESOLVED",
           },
         });
+
+        if (!existing) {
+          await client.syncConflict.create({
+            data: {
+              ...identity,
+              localValue: change.localValue ?? null,
+              remoteValue: change.remoteValue ?? null,
+            },
+          });
+        }
         result.conflicts += 1;
       }
       // Trygge remote-endringer ved siden av konflikter kan fortsatt

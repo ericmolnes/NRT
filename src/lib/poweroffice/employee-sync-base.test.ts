@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildPowerOfficeEmployeeSyncPlan,
+  derivePowerOfficePersonnelStatus,
   serializePowerOfficeEmployeeBase,
   type PowerOfficeEmployeeLocalShape,
 } from "./employee-sync-base";
@@ -107,4 +108,14 @@ test("buildPowerOfficeEmployeeSyncPlan keeps base raw payload for local-only cha
 
   const nextBase = JSON.parse(plan.nextBaseRawJson!);
   assert.equal(nextBase.phoneNumber, "100");
+});
+
+test("derivePowerOfficePersonnelStatus inaktiverer Personnel når PO-ansatt er inaktiv", () => {
+  assert.equal(derivePowerOfficePersonnelStatus(false, "ACTIVE"), "INACTIVE");
+  assert.equal(derivePowerOfficePersonnelStatus(false, "INACTIVE"), "INACTIVE");
+});
+
+test("derivePowerOfficePersonnelStatus reaktiverer ikke arkiverte Personnel-rader", () => {
+  assert.equal(derivePowerOfficePersonnelStatus(true, "ARCHIVED"), null);
+  assert.equal(derivePowerOfficePersonnelStatus(false, "ARCHIVED"), null);
 });

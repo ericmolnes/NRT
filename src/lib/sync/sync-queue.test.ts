@@ -312,3 +312,61 @@ test("processSyncDiagnosis: conflict med flere felt oppretter én SyncConflict p
   const fields = state.conflicts.map((c) => c.field).sort();
   assert.deepEqual(fields, ["email", "firstName", "phone"]);
 });
+
+test("processSyncDiagnosis: conflict gjenbruker uløst SyncConflict for samme felt", async () => {
+  const { client, state } = createStub();
+  const existing: SyncConflictRow = {
+    id: "existing_1",
+    source: "RECMAN",
+    model: "RecmanCandidate",
+    recordId: "r8",
+    field: "email",
+    localValue: "lokal@x",
+    remoteValue: "remote@x",
+    status: "UNRESOLVED",
+    detectedAt: new Date("2026-04-28T10:00:00Z"),
+  };
+  state.conflicts.push(existing);
+
+  Object.assign(client.syncConflict, {
+    findFirst: async (args: {
+      where: {
+        source: string;
+        model: string;
+        recordId: string;
+        field: string;
+        status: string;
+      };
+    }) =>
+      state.conflicts.find(
+        (conflict) =>
+          conflict.source === args.where.source &&
+          conflict.model === args.where.model &&
+          conflict.recordId === args.where.recordId &&
+          conflict.field === args.where.field &&
+          conflict.status === args.where.status
+      ) ?? null,
+  });
+
+  const diagnosis: SyncDiagnosis = {
+    kind: "conflict",
+    conflicts: [
+      { field: "email", localValue: "lokal@x", remoteValue: "remote@x", baseValue: "old@x" },
+    ],
+    safeRemote: [],
+  };
+
+  const result = await processSyncDiagnosis(client, {
+    source: "RECMAN",
+    model: "RecmanCandidate",
+    recordId: "r8",
+    diagnosis,
+    applyChange: async () => {
+      throw new Error("ikke kall");
+    },
+  });
+
+  assert.equal(result.conflicts, 1);
+  assert.equal(state.conflictCalls.length, 0);
+  assert.equal(state.conflicts.length, 1);
+});

@@ -8,6 +8,10 @@ import { revalidatePath } from "next/cache";
 import { type Prisma } from "@/generated/prisma/client";
 import { SKILL_CATEGORIES } from "@/lib/recman/types";
 import type { SyncResult } from "@/lib/sync/sync-queue";
+import {
+  countMissingRemoteRecords,
+  summarizeSyncRunMessage,
+} from "@/lib/sync/sync-run-status";
 
 // ─── Synkronisering ─────────────────────────────────────────────────
 
@@ -39,27 +43,30 @@ export async function triggerRecmanSync(): Promise<RecmanSyncActionResult> {
 
   const conflicts = result.conflicts;
   return {
-    message: summarizeResult(conflicts),
+    message: summarizeResult(conflicts, {
+      failedRecords: result.failedRecords,
+      missingRemoteRecords: countMissingRemoteRecords(result),
+      errorCount: result.errors.length,
+    }),
     conflicts,
     raw: result,
   };
 }
 
-function summarizeResult(r: SyncResult): string {
-  if (
-    r.applied === 0 &&
-    r.conflicts === 0 &&
-    r.pendingPush === 0 &&
-    r.missingLink === 0
-  ) {
-    return "Synkronisering fullført — ingen endringer";
-  }
-  const parts: string[] = [];
-  if (r.applied) parts.push(`${r.applied} oppdatert`);
-  if (r.conflicts) parts.push(`${r.conflicts} konflikt${r.conflicts === 1 ? "" : "er"}`);
-  if (r.pendingPush) parts.push(`${r.pendingPush} venter på push`);
-  if (r.missingLink) parts.push(`${r.missingLink} mangler kobling`);
-  return `Synket. ${parts.join(", ")}.`;
+function summarizeResult(
+  r: SyncResult,
+  options: {
+    failedRecords?: number;
+    missingRemoteRecords?: number;
+    errorCount?: number;
+  } = {}
+): string {
+  return summarizeSyncRunMessage({
+    conflicts: r,
+    failedRecords: options.failedRecords,
+    missingRemoteRecords: options.missingRemoteRecords,
+    errorCount: options.errorCount,
+  });
 }
 
 export async function getLastSync() {

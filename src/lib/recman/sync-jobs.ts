@@ -10,6 +10,25 @@ type RecmanJobAllocationDataInput = {
   label: string;
 };
 
+export type RecmanJobSkipReason =
+  | "missingCandidateId"
+  | "missingProjectId"
+  | "missingPersonnelLink"
+  | "missingProjectLink";
+
+type RecmanJobLinkInput = {
+  candidateId?: unknown;
+  projectId?: unknown;
+};
+
+export function getRecmanJobSkipReason(
+  job: RecmanJobLinkInput
+): RecmanJobSkipReason | null {
+  if (!job.candidateId) return "missingCandidateId";
+  if (!job.projectId) return "missingProjectId";
+  return null;
+}
+
 export function buildRecmanJobAllocationData({
   entryId,
   jobAssignmentId,
@@ -34,17 +53,36 @@ export async function syncRecmanJobs(triggeredBy: string) {
   let synced = 0;
   let created = 0;
   let failed = 0;
+  let skipped = 0;
+  const skipReasons: Record<RecmanJobSkipReason, number> = {
+    missingCandidateId: 0,
+    missingProjectId: 0,
+    missingPersonnelLink: 0,
+    missingProjectLink: 0,
+  };
+
+  function skip(reason: RecmanJobSkipReason) {
+    skipped++;
+    skipReasons[reason]++;
+  }
 
   for (const rJob of jobs) {
     try {
-      if (!rJob.candidateId || !rJob.projectId) continue;
+      const directSkipReason = getRecmanJobSkipReason(rJob);
+      if (directSkipReason) {
+        skip(directSkipReason);
+        continue;
+      }
 
       // Find Personnel via RecmanCandidate
       const candidate = await db.recmanCandidate.findFirst({
         where: { recmanId: rJob.candidateId },
         select: { personnelId: true },
       });
-      if (!candidate?.personnelId) continue;
+      if (!candidate?.personnelId) {
+        skip("missingPersonnelLink");
+        continue;
+      }
       const personnelId = candidate.personnelId;
 
       // Find NRT Project via recmanProjectId
@@ -52,7 +90,10 @@ export async function syncRecmanJobs(triggeredBy: string) {
         where: { recmanProjectId: rJob.projectId },
         select: { id: true },
       });
-      if (!project) continue;
+      if (!project) {
+        skip("missingProjectLink");
+        continue;
+      }
 
       // Find or create a Job in NRT for this project + name
       let nrtJob = await db.job.findFirst({
@@ -172,5 +213,5 @@ export async function syncRecmanJobs(triggeredBy: string) {
     }
   }
 
-  return { total: jobs.length, synced, created, failed };
+  return { total: jobs.length, synced, created, failed, skipped, skipReasons };
 }

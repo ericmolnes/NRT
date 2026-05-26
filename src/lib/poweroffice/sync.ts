@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { SyncResult } from "@/lib/sync/sync-queue";
 import { emptySyncResult } from "@/lib/sync/sync-queue";
+import { getSyncLogStatus, type SyncLogStatus } from "@/lib/sync/sync-run-status";
 
 export interface SyncOptions<TPO> {
   resourceType: string;
@@ -20,6 +21,7 @@ export type SyncSummary = {
   total: number;
   synced: number;
   failed: number;
+  status: SyncLogStatus;
   conflicts: SyncResult;
 };
 
@@ -65,17 +67,26 @@ export async function syncResource<TPO>(options: SyncOptions<TPO>) {
       }
     }
 
+    const status = getSyncLogStatus(failed);
+
     await db.pOSyncLog.update({
       where: { id: syncLog.id },
       data: {
-        status: "completed",
+        status,
         recordsSynced: synced,
         recordsFailed: failed,
         completedAt: new Date(),
       },
     });
 
-    return { syncLogId: syncLog.id, total, synced, failed };
+    return {
+      syncLogId: syncLog.id,
+      total,
+      synced,
+      failed,
+      status,
+      conflicts: emptyConflictSummary(),
+    };
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Ukjent feil";

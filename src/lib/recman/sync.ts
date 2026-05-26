@@ -22,6 +22,11 @@ import {
   type SyncResult,
 } from "@/lib/sync/sync-queue";
 import {
+  countFailedRecords,
+  getSyncLogStatus,
+  hasSyncRunFailures,
+} from "@/lib/sync/sync-run-status";
+import {
   buildRecmanCandidateSyncPlan,
   deriveRecmanCandidateEmployeeState,
   parseRecmanDate,
@@ -39,9 +44,27 @@ import {
  * andre ressurser bruker fortsatt eksisterende blind upsert. Når andre
  * sync-paths flyttes over til detector-modellen, summeres de inn her.
  */
+type RecmanSyncResource = "candidates" | "companies" | "projects" | "jobs";
+
+export type RecmanSyncRunError = {
+  resource: RecmanSyncResource;
+  message: string;
+};
+
+function toSyncRunError(
+  resource: RecmanSyncResource,
+  error: unknown
+): RecmanSyncRunError {
+  return {
+    resource,
+    message: error instanceof Error ? error.message : String(error),
+  };
+}
+
 export async function syncAllRecman(triggeredBy: string) {
   const results: Record<string, unknown> = {};
   const collectedConflicts: SyncResult[] = [];
+  const errors: RecmanSyncRunError[] = [];
 
   // 1. Sync candidates (employees)
   try {
@@ -49,28 +72,36 @@ export async function syncAllRecman(triggeredBy: string) {
     results.candidates = cand;
     if (cand.conflicts) collectedConflicts.push(cand.conflicts);
   } catch (e) {
-    results.candidates = { error: e instanceof Error ? e.message : String(e) };
+    const error = toSyncRunError("candidates", e);
+    results.candidates = { error: error.message };
+    errors.push(error);
   }
 
   // 2. Sync companies → NRT customers
   try {
     results.companies = await syncRecmanCompanies(triggeredBy);
   } catch (e) {
-    results.companies = { error: e instanceof Error ? e.message : String(e) };
+    const error = toSyncRunError("companies", e);
+    results.companies = { error: error.message };
+    errors.push(error);
   }
 
   // 3. Sync projects → NRT projects
   try {
     results.projects = await syncRecmanProjects(triggeredBy);
   } catch (e) {
-    results.projects = { error: e instanceof Error ? e.message : String(e) };
+    const error = toSyncRunError("projects", e);
+    results.projects = { error: error.message };
+    errors.push(error);
   }
 
   // 4. Sync jobs → NRT job assignments + resource plan
   try {
     results.jobs = await syncRecmanJobs(triggeredBy);
   } catch (e) {
-    results.jobs = { error: e instanceof Error ? e.message : String(e) };
+    const error = toSyncRunError("jobs", e);
+    results.jobs = { error: error.message };
+    errors.push(error);
   }
 
   const conflicts = mergeSyncResults(collectedConflicts);
@@ -87,7 +118,15 @@ export async function syncAllRecman(triggeredBy: string) {
     }
   }
 
-  return { ...results, conflicts };
+  const failedRecords = countFailedRecords(results);
+
+  return {
+    ...results,
+    conflicts,
+    errors,
+    failedRecords,
+    ok: !hasSyncRunFailures({ ...results, errors }),
+  };
 }
 
 export async function syncAllCandidates(triggeredBy: string) {
@@ -115,10 +154,19 @@ export async function syncAllCandidates(triggeredBy: string) {
       }
     }
 
+    const status = getSyncLogStatus(failed);
+    const seenRecmanIds = candidates.map((candidate) => candidate.candidateId);
+    const missingRemoteWhere = seenRecmanIds.length
+      ? { recmanId: { notIn: seenRecmanIds } }
+      : {};
+    const missingRemote = await db.recmanCandidate.count({
+      where: missingRemoteWhere,
+    });
+
     await db.recmanSyncLog.update({
       where: { id: log.id },
       data: {
-        status: "completed",
+        status,
         recordsTotal: candidates.length,
         recordsSynced: synced,
         recordsFailed: failed,
@@ -135,6 +183,8 @@ export async function syncAllCandidates(triggeredBy: string) {
       total: candidates.length,
       synced,
       failed,
+      status,
+      missingRemote,
       conflicts: mergeSyncResults(perRecord),
     };
   } catch (e) {

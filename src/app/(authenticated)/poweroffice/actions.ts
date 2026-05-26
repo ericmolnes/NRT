@@ -7,6 +7,11 @@ import { revalidatePath } from "next/cache";
 import { runSync, type SyncResourceType } from "@/lib/poweroffice/sync-all";
 import type { SyncResult } from "@/lib/sync/sync-queue";
 import { emptySyncResult, mergeSyncResults } from "@/lib/sync/sync-queue";
+import {
+  countFailedRecords,
+  countMissingRemoteRecords,
+  summarizeSyncRunMessage,
+} from "@/lib/sync/sync-run-status";
 
 export type ActionState = {
   errors?: Record<string, string[] | undefined>;
@@ -58,7 +63,10 @@ export async function triggerSync(
     );
 
     return {
-      message: summarizeResult(conflicts),
+      message: summarizeResult(conflicts, {
+        failedRecords: countFailedRecords(result),
+        missingRemoteRecords: countMissingRemoteRecords(result),
+      }),
       conflicts,
     };
   } catch (error) {
@@ -68,21 +76,20 @@ export async function triggerSync(
   }
 }
 
-function summarizeResult(r: SyncResult): string {
-  if (
-    r.applied === 0 &&
-    r.conflicts === 0 &&
-    r.pendingPush === 0 &&
-    r.missingLink === 0
-  ) {
-    return "Synkronisering fullført — ingen endringer";
-  }
-  const parts: string[] = [];
-  if (r.applied) parts.push(`${r.applied} oppdatert`);
-  if (r.conflicts) parts.push(`${r.conflicts} konflikt${r.conflicts === 1 ? "" : "er"}`);
-  if (r.pendingPush) parts.push(`${r.pendingPush} venter på push`);
-  if (r.missingLink) parts.push(`${r.missingLink} mangler kobling`);
-  return `Synket. ${parts.join(", ")}.`;
+function summarizeResult(
+  r: SyncResult,
+  options: {
+    failedRecords?: number;
+    missingRemoteRecords?: number;
+    errorCount?: number;
+  } = {}
+): string {
+  return summarizeSyncRunMessage({
+    conflicts: r,
+    failedRecords: options.failedRecords,
+    missingRemoteRecords: options.missingRemoteRecords,
+    errorCount: options.errorCount,
+  });
 }
 
 export async function linkEmployeeToPersonnel(

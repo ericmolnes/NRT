@@ -21,6 +21,8 @@ export type PowerOfficeEmployeeSyncPlan = {
   nextBaseRawJson: string | null;
 };
 
+export type PersonnelStatusValue = "ACTIVE" | "INACTIVE" | "ARCHIVED";
+
 const COMPARED_FIELDS = [
   "firstName",
   "lastName",
@@ -47,6 +49,16 @@ export function serializePowerOfficeEmployeeBase(
   shape: Record<string, unknown>
 ): string {
   return JSON.stringify(shape);
+}
+
+export function derivePowerOfficePersonnelStatus(
+  isActive: boolean | null | undefined,
+  currentStatus: PersonnelStatusValue | null | undefined
+): PersonnelStatusValue | null {
+  if (currentStatus === "ARCHIVED") return null;
+  if (isActive === false) return "INACTIVE";
+  if (isActive === true && currentStatus === "INACTIVE") return "ACTIVE";
+  return null;
 }
 
 export function mapPowerOfficeEmployeeToLocalShape(

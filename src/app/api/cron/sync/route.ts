@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runSync } from "@/lib/poweroffice/sync-all";
 import { syncAllRecman } from "@/lib/recman/sync";
+import { hasSyncRunFailures } from "@/lib/sync/sync-run-status";
 
 /**
  * Cron endpoint for automated sync of PowerOffice and Recman.
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
   // Sync PowerOffice
   try {
     const poResult = await runSync("all", "cron");
-    results.poweroffice = { success: true, ...poResult };
+    results.poweroffice = { success: !hasSyncRunFailures(poResult), ...poResult };
   } catch (error) {
     results.poweroffice = {
       success: false,
@@ -40,7 +41,7 @@ export async function GET(request: NextRequest) {
   // Sync Recman (candidates + companies + projects + jobs)
   try {
     const recmanResult = await syncAllRecman("cron");
-    results.recman = { success: true, ...recmanResult };
+    results.recman = { success: recmanResult.ok, ...recmanResult };
   } catch (error) {
     results.recman = {
       success: false,
