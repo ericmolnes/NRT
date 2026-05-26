@@ -24,7 +24,9 @@ import {
 import {
   buildRecmanCandidateSyncPlan,
   deriveRecmanCandidateEmployeeState,
+  parseRecmanDate,
   serializeRecmanCandidateBase,
+  shouldEnsurePersonnelForRecmanCandidate,
   type RecmanCandidateSyncShape,
 } from "./candidate-sync";
 
@@ -247,8 +249,12 @@ function toCandidateSyncShape(
 }
 
 async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
-  const hasEmployee = !!c.employee?.startDate;
-  const isActive = hasEmployee && !c.employee?.endDate;
+  const employee =
+    typeof c.employee === "object" && c.employee !== null ? c.employee : null;
+  const employeeStart = parseRecmanDate(employee?.startDate);
+  const employeeEnd = parseRecmanDate(employee?.endDate);
+  const hasEmployee = employeeStart !== null;
+  const isActive = hasEmployee && employeeEnd === null;
 
   const candidateData = {
     corporationId: c.corporationId,
@@ -264,22 +270,16 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
     country: c.country || null,
     nationality: c.nationality || null,
     gender: c.gender || null,
-    dob: c.dob ? new Date(c.dob) : null,
+    dob: parseRecmanDate(c.dob),
     title: c.title || null,
     description: c.description || null,
     rating: c.rating ? parseInt(c.rating, 10) : 0,
     imageUrl: c.image || null,
     linkedIn: c.linkedIn || null,
     isEmployee: hasEmployee,
-    employeeNumber: c.employee?.number ?? null,
-    employeeStart: c.employee?.startDate
-      ? new Date(c.employee.startDate)
-      : null,
-    employeeEnd: isActive
-      ? null
-      : c.employee?.endDate
-        ? new Date(c.employee.endDate)
-        : null,
+    employeeNumber: employee?.number ?? null,
+    employeeStart,
+    employeeEnd: isActive ? null : employeeEnd,
     skills: c.skills ?? [],
     education: c.education ?? [],
     experience: c.experience ?? [],
@@ -296,8 +296,8 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
       url: f.url || "",
       category: f.category,
     })),
-    recmanCreated: c.created ? new Date(c.created) : null,
-    recmanUpdated: c.updated ? new Date(c.updated) : null,
+    recmanCreated: parseRecmanDate(c.created),
+    recmanUpdated: parseRecmanDate(c.updated),
   };
 
   const existing = await db.recmanCandidate.findUnique({
@@ -372,18 +372,19 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
     previousEmployeeState
   );
 
-  // Auto-match or create Personnel for ALL synced candidates.
+  // Auto-match or create Personnel for synced employees.
   // Status- og role-oppdatering basert på Recman-employee-data gjøres kun
   // for ansatte; innleide- og kandidat-status styres manuelt i NRT.
-  if (!candidate.personnelId) {
+  if (
+    !candidate.personnelId &&
+    shouldEnsurePersonnelForRecmanCandidate(employeeState)
+  ) {
     const personnelId = await findOrCreatePersonnel({
       firstName: candidate.firstName,
       lastName: candidate.lastName,
       email: candidate.email || undefined,
       phone: candidate.mobilePhone || candidate.phone || undefined,
-      role: employeeState.hasEmployee
-        ? candidate.title || "Ansatt"
-        : candidate.title || "Kandidat",
+      role: candidate.title || "Ansatt",
     });
 
     await db.recmanCandidate.update({
@@ -399,7 +400,7 @@ async function upsertCandidate(c: RecmanCandidate): Promise<SyncResult> {
         });
       }
     }
-  } else if (employeeState.targetStatus) {
+  } else if (candidate.personnelId && employeeState.targetStatus) {
     await enrichPersonnel(candidate.personnelId, {
       phone: candidate.mobilePhone || candidate.phone,
     });

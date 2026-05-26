@@ -60,6 +60,17 @@ export function parseRecmanCandidateBase(
   }
 }
 
+export function parseRecmanDate(
+  value: string | null | undefined
+): Date | null {
+  if (!value) return null;
+  if (value.startsWith("0000-00-00")) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
 function collectFields(
   local: RecmanCandidateSyncShape | null,
   remote: RecmanCandidateSyncShape,
@@ -171,4 +182,10 @@ export function deriveRecmanCandidateEmployeeState(
     hasEmployee: true,
     targetStatus: shape.employeeEnd ? "INACTIVE" : "ACTIVE",
   };
+}
+
+export function shouldEnsurePersonnelForRecmanCandidate(
+  employeeState: RecmanCandidateEmployeeState
+): boolean {
+  return employeeState.hasEmployee;
 }

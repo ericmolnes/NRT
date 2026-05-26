@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   buildRecmanCandidateSyncPlan,
   deriveRecmanCandidateEmployeeState,
+  parseRecmanDate,
   serializeRecmanCandidateBase,
+  shouldEnsurePersonnelForRecmanCandidate,
   type RecmanCandidateSyncShape,
 } from "./candidate-sync";
 
@@ -145,5 +147,43 @@ test("deriveRecmanCandidateEmployeeState derives personnel status from local syn
       { wasEmployee: true }
     ),
     { hasEmployee: false, targetStatus: "INACTIVE" }
+  );
+});
+
+test("shouldEnsurePersonnelForRecmanCandidate only auto-creates Personnel for employees", () => {
+  assert.equal(
+    shouldEnsurePersonnelForRecmanCandidate({
+      hasEmployee: true,
+      targetStatus: "ACTIVE",
+    }),
+    true
+  );
+
+  assert.equal(
+    shouldEnsurePersonnelForRecmanCandidate({
+      hasEmployee: false,
+      targetStatus: null,
+    }),
+    false
+  );
+
+  assert.equal(
+    shouldEnsurePersonnelForRecmanCandidate({
+      hasEmployee: false,
+      targetStatus: "INACTIVE",
+    }),
+    false
+  );
+});
+
+test("parseRecmanDate returns null for blank and invalid Recman dates", () => {
+  assert.equal(parseRecmanDate(undefined), null);
+  assert.equal(parseRecmanDate(""), null);
+  assert.equal(parseRecmanDate("0000-00-00"), null);
+  assert.equal(parseRecmanDate("not-a-date"), null);
+
+  assert.equal(
+    parseRecmanDate("2026-05-26")?.toISOString(),
+    "2026-05-26T00:00:00.000Z"
   );
 });

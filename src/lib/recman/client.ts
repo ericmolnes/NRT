@@ -49,6 +49,19 @@ export async function recmanGet<T = RecmanCandidate>(
   return res.json();
 }
 
+export function assertRecmanGetSuccess<T>(
+  result: RecmanGetResponse<T>,
+  context: string
+): asserts result is Extract<RecmanGetResponse<T>, { success: true }> {
+  if (result.success) return;
+
+  const message = result.error
+    .map((error) => error.message)
+    .filter(Boolean)
+    .join("; ");
+  throw new Error(`Recman API ${context} failed: ${message || "Unknown error"}`);
+}
+
 // ─── POST endpoint ──────────────────────────────────────────────────
 
 export async function recmanPost(
@@ -81,7 +94,8 @@ export async function getAllCandidates(fields: string): Promise<RecmanCandidate[
 
   while (true) {
     const result = await recmanGet<RecmanCandidate>("candidate", fields, { page });
-    if (!result.success || !result.data) break;
+    assertRecmanGetSuccess(result, `candidate page ${page}`);
+    if (!result.data) break;
 
     const entries = Object.values(result.data);
     if (entries.length === 0) break;
@@ -100,7 +114,8 @@ async function getAllPaginated<T>(scope: string, fields: string): Promise<T[]> {
   let page = 1;
   while (true) {
     const result = await recmanGet<T>(scope, fields, { page });
-    if (!result.success || !result.data) break;
+    assertRecmanGetSuccess(result, `${scope} page ${page}`);
+    if (!result.data) break;
     const entries = Object.values(result.data);
     if (entries.length === 0) break;
     all.push(...entries);
@@ -146,7 +161,8 @@ export async function getCandidateById(
     candidateIds: [candidateId],
   });
 
-  if (!result.success || !result.data) return null;
+  assertRecmanGetSuccess(result, `candidate ${candidateId}`);
+  if (!result.data) return null;
 
   const entries = Object.values(result.data);
   return entries[0] || null;

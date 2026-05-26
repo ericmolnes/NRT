@@ -232,8 +232,8 @@ export const JOB_FIELDS = "name,description,startDate,endDate,salary,created,upd
 
 // ─── All available GET fields ───────────────────────────────────────
 
-export const CANDIDATE_BASIC_FIELDS = "firstName,lastName,email,phone,mobilePhone,address,postalCode,postalPlace,city,country,nationality,gender,dob,title,description,created,updated,rating,image,linkedIn" as const;
-export const CANDIDATE_NESTED_FIELDS = "employee,skills,education,experience,certification,projectExperience,relative,attributes,language,driversLicense,reference,files" as const;
+export const CANDIDATE_BASIC_FIELDS = "firstName,lastName,email,mobilePhone,postalCode,city,country,nationality,gender,dob,title,description,created,updated,rating" as const;
+export const CANDIDATE_NESTED_FIELDS = "employee,skills,education,experience,certification,projectExperience,attributes,language,driversLicense,reference,files" as const;
 export const CANDIDATE_ALL_FIELDS = `${CANDIDATE_BASIC_FIELDS},${CANDIDATE_NESTED_FIELDS}` as const;
 
 // ─── Filter/Search Types ────────────────────────────────────────────
